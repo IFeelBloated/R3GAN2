@@ -135,11 +135,13 @@ def parse_comma_separated_list(s):
 @click.option('--mirror',       help='Enable dataset x-flips', metavar='BOOL',                  type=bool, default=False, show_default=True)
 @click.option('--aug',          help='Augmentation mode',                                       type=click.Choice(['noaug', 'ada', 'fixed']), default='ada', show_default=True)
 @click.option('--resume',       help='Resume from given network pickle', metavar='[PATH|URL]',  type=str)
+@click.option('--preset',       help='Preset configs', metavar='STR',                           type=str, default='FFHQ256', show_default=True)
 
 # Misc hyperparameters.
 @click.option('--p',            help='Probability for --aug=fixed', metavar='FLOAT',            type=click.FloatRange(min=0, max=1), default=0.2, show_default=True)
 @click.option('--target',       help='Target value for --aug=ada', metavar='FLOAT',             type=click.FloatRange(min=0, max=1), default=0.6, show_default=True)
-@click.option('--batch-gpu',    help='Limit batch size per GPU', metavar='INT',                 type=click.IntRange(min=1))
+@click.option('--g-batch-gpu',  help='Limit batch size per GPU', metavar='INT',                 type=click.IntRange(min=1))
+@click.option('--d-batch-gpu',  help='Limit batch size per GPU', metavar='INT',                 type=click.IntRange(min=1))
 @click.option('--glr',          help='G learning rate  [default: varies]', metavar='FLOAT',     type=click.FloatRange(min=0))
 @click.option('--dlr',          help='D learning rate', metavar='FLOAT',                        type=click.FloatRange(min=0), default=0.002, show_default=True)
 @click.option('--map-depth',    help='Mapping network depth  [default: varies]', metavar='INT', type=click.IntRange(min=1))
@@ -147,7 +149,7 @@ def parse_comma_separated_list(s):
 # Misc settings.
 @click.option('--desc',         help='String to include in result dir name', metavar='STR',     type=str)
 @click.option('--metrics',      help='Quality metrics', metavar='[NAME|A,B,C|none]',            type=parse_comma_separated_list, default='fid50k_full', show_default=True)
-@click.option('--kimg',         help='Total training duration', metavar='KIMG',                 type=click.IntRange(min=1), default=25000, show_default=True)
+@click.option('--kimg',         help='Total training duration', metavar='KIMG',                 type=click.IntRange(min=1), default=100000, show_default=True)
 @click.option('--tick',         help='How often to print progress', metavar='KIMG',             type=click.IntRange(min=1), default=4, show_default=True)
 @click.option('--snap',         help='How often to save snapshots', metavar='TICKS',            type=click.IntRange(min=1), default=50, show_default=True)
 @click.option('--seed',         help='Random seed', metavar='INT',                              type=click.IntRange(min=0), default=0, show_default=True)
@@ -188,7 +190,7 @@ def main(**kwargs):
     c.G_opt_kwargs = dnnlib.EasyDict(class_name='torch.optim.Adam', betas=[0,0.99], eps=1e-8)
     c.D_opt_kwargs = dnnlib.EasyDict(class_name='torch.optim.Adam', betas=[0,0.99], eps=1e-8)
     
-    c.loss_kwargs = dnnlib.EasyDict(class_name='training.loss.StyleGAN2Loss')
+    c.loss_kwargs = dnnlib.EasyDict(class_name='training.loss.BaselineGANLoss')
     c.data_loader_kwargs = dnnlib.EasyDict(pin_memory=True, prefetch_factor=2)
 
     # Training set.
@@ -201,27 +203,42 @@ def main(**kwargs):
     # Hyperparameters & settings.
     c.num_gpus = opts.gpus
     c.batch_size = opts.batch
-    c.batch_gpu = opts.batch_gpu or opts.batch // opts.gpus
+    c.g_batch_gpu = opts.g_batch_gpu or opts.batch // opts.gpus
+    c.d_batch_gpu = opts.d_batch_gpu or opts.batch // opts.gpus
     
     
-    width_per_stage = [3 * x // 4 for x in [1024, 1024, 1024, 1024, 512, 256, 128]]
-    blocks_per_stage = [2 * x for x in [1, 1, 1, 1, 1, 1, 1]]
-    cardinality_per_stage = [3 * x for x in [32, 32, 32, 32, 16, 8, 4]]
+    if opts.preset == 'FFHQ256':
+        WidthPerStage = [3 * x // 4 for x in [1024, 1024, 1024, 1024, 512, 256, 128]]
+        BlocksPerStage = [2 * x for x in [1, 1, 1, 1, 1, 1, 1]]
+        CardinalityPerStage = [3 * x for x in [32, 32, 32, 32, 16, 8, 4]]
+        FP16Stages = [-1, -2, -3, -4]
+        NoiseDimension = 64
+        
+    if opts.preset == 'cifar':
+        WidthPerStage = [3 * x // 4 for x in [1024, 1024, 1024, 1024]]
+        BlocksPerStage = [2 * x for x in [1, 1, 1, 1]]
+        CardinalityPerStage = [3 * x for x in [32, 32, 32, 32]]
+        FP16Stages = [-1, -2, -3]
+        NoiseDimension = 64
+        
+        c.G_kwargs.ConditionEmbeddingDimension = NoiseDimension
+        c.D_kwargs.ConditionEmbeddingDimension = WidthPerStage[0]
     
-    c.G_kwargs.NoiseDimension = 64
-    c.G_kwargs.WidthPerStage = width_per_stage
-    c.G_kwargs.CardinalityPerStage = cardinality_per_stage
-    c.G_kwargs.BlocksPerStage = blocks_per_stage
+    
+    c.G_kwargs.NoiseDimension = NoiseDimension
+    c.G_kwargs.WidthPerStage = WidthPerStage
+    c.G_kwargs.CardinalityPerStage = CardinalityPerStage
+    c.G_kwargs.BlocksPerStage = BlocksPerStage
     c.G_kwargs.ExpansionFactor = 2
+    c.G_kwargs.FP16Stages = FP16Stages
     
-    c.D_kwargs.WidthPerStage = [*reversed(width_per_stage)]
-    c.D_kwargs.CardinalityPerStage = [*reversed(cardinality_per_stage)]
-    c.D_kwargs.BlocksPerStage = [*reversed(blocks_per_stage)]
+    c.D_kwargs.WidthPerStage = [*reversed(WidthPerStage)]
+    c.D_kwargs.CardinalityPerStage = [*reversed(CardinalityPerStage)]
+    c.D_kwargs.BlocksPerStage = [*reversed(BlocksPerStage)]
     c.D_kwargs.ExpansionFactor = 2
+    c.D_kwargs.FP16Stages = [x + len(FP16Stages) for x in FP16Stages]
     
-    
-    
-    c.loss_kwargs.r1_gamma = opts.gamma
+    c.loss_kwargs.gamma = opts.gamma
     
     c.G_opt_kwargs.lr = opts.glr
     c.D_opt_kwargs.lr = opts.dlr
@@ -236,7 +253,7 @@ def main(**kwargs):
     # Sanity checks.
     if c.batch_size % c.num_gpus != 0:
         raise click.ClickException('--batch must be a multiple of --gpus')
-    if c.batch_size % (c.num_gpus * c.batch_gpu) != 0:
+    if c.batch_size % (c.num_gpus * c.g_batch_gpu) != 0 or c.batch_size % (c.num_gpus * c.d_batch_gpu) != 0:
         raise click.ClickException('--batch must be a multiple of --gpus times --batch-gpu')
     if any(not metric_main.is_valid_metric(metric) for metric in c.metrics):
         raise click.ClickException('\n'.join(['--metrics can only contain the following values:'] + metric_main.list_valid_metrics()))
@@ -264,7 +281,7 @@ def main(**kwargs):
         c.cudnn_benchmark = False
 
     # Description string.
-    desc = f'{dataset_name:s}-gpus{c.num_gpus:d}-batch{c.batch_size:d}-gamma{c.loss_kwargs.r1_gamma:g}'
+    desc = f'{dataset_name:s}-gpus{c.num_gpus:d}-batch{c.batch_size:d}-gamma{c.loss_kwargs.gamma:g}'
     if opts.desc is not None:
         desc += f'-{opts.desc}'
 

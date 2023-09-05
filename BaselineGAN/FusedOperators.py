@@ -28,6 +28,6 @@ class BiasedActivationCUDA(nn.Module):
         self.Bias.data.zero_()
         
     def forward(self, x):
-        return bias_act.bias_act(x, self.Bias, act=BiasedActivationCUDA.Function, gain=1)
+        return bias_act.bias_act(x, self.Bias.to(x.dtype), act=BiasedActivationCUDA.Function, gain=1)
 
 BiasedActivation = BiasedActivationCUDA
