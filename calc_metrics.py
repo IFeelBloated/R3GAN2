@@ -114,10 +114,6 @@ def calc_metrics(ctx, network_pkl, metrics, data, mirror, gpus, verbose):
       fid50k_full  Frechet inception distance against the full dataset.
       kid50k_full  Kernel inception distance against the full dataset.
       pr50k3_full  Precision and recall againt the full dataset.
-      ppl2_wend    Perceptual path length in W, endpoints, full image.
-      eqt50k_int   Equivariance w.r.t. integer translation (EQ-T).
-      eqt50k_frac  Equivariance w.r.t. fractional translation (EQ-T_frac).
-      eqr50k       Equivariance w.r.t. rotation (EQ-R).
 
     \b
     Legacy metrics:

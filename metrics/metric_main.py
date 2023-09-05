@@ -18,9 +18,7 @@ from . import metric_utils
 from . import frechet_inception_distance
 from . import kernel_inception_distance
 from . import precision_recall
-from . import perceptual_path_length
 from . import inception_score
-from . import equivariance
 
 #----------------------------------------------------------------------------
 
@@ -99,29 +97,6 @@ def pr50k3_full(opts):
     opts.dataset_kwargs.update(max_size=None, xflip=False)
     precision, recall = precision_recall.compute_pr(opts, max_real=200000, num_gen=50000, nhood_size=3, row_batch_size=10000, col_batch_size=10000)
     return dict(pr50k3_full_precision=precision, pr50k3_full_recall=recall)
-
-@register_metric
-def ppl2_wend(opts):
-    ppl = perceptual_path_length.compute_ppl(opts, num_samples=50000, epsilon=1e-4, space='w', sampling='end', crop=False, batch_size=2)
-    return dict(ppl2_wend=ppl)
-
-@register_metric
-def eqt50k_int(opts):
-    opts.G_kwargs.update(force_fp32=True)
-    psnr = equivariance.compute_equivariance_metrics(opts, num_samples=50000, batch_size=4, compute_eqt_int=True)
-    return dict(eqt50k_int=psnr)
-
-@register_metric
-def eqt50k_frac(opts):
-    opts.G_kwargs.update(force_fp32=True)
-    psnr = equivariance.compute_equivariance_metrics(opts, num_samples=50000, batch_size=4, compute_eqt_frac=True)
-    return dict(eqt50k_frac=psnr)
-
-@register_metric
-def eqr50k(opts):
-    opts.G_kwargs.update(force_fp32=True)
-    psnr = equivariance.compute_equivariance_metrics(opts, num_samples=50000, batch_size=4, compute_eqr=True)
-    return dict(eqr50k=psnr)
 
 #----------------------------------------------------------------------------
 # Legacy metrics.

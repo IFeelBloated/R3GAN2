@@ -16,7 +16,7 @@ class InterpolativeUpsamplerReference(nn.Module):
         self.FilterRadius = len(Filter) // 2
         
     def forward(self, x):
-        Kernel = 4 * self.Kernel.view(1, 1, self.Kernel.shape[0], self.Kernel.shape[1])
+        Kernel = 4 * self.Kernel.view(1, 1, self.Kernel.shape[0], self.Kernel.shape[1]).to(x.dtype)
         y = nn.functional.conv_transpose2d(x.view(x.shape[0] * x.shape[1], 1, x.shape[2], x.shape[3]), Kernel, stride=2, padding=self.FilterRadius)
         
         return y.view(x.shape[0], x.shape[1], y.shape[2], y.shape[3])
@@ -29,7 +29,7 @@ class InterpolativeDownsamplerReference(nn.Module):
         self.FilterRadius = len(Filter) // 2
         
     def forward(self, x):
-        Kernel = self.Kernel.view(1, 1, self.Kernel.shape[0], self.Kernel.shape[1])
+        Kernel = self.Kernel.view(1, 1, self.Kernel.shape[0], self.Kernel.shape[1]).to(x.dtype)
         y = nn.functional.conv2d(x.view(x.shape[0] * x.shape[1], 1, x.shape[2], x.shape[3]), Kernel, stride=2, padding=self.FilterRadius)
         
         return y.view(x.shape[0], x.shape[1], y.shape[2], y.shape[3])
@@ -42,7 +42,7 @@ class InplaceUpsamplerReference(nn.Module):
         self.FilterRadius = len(Filter) // 2
         
     def forward(self, x):
-        Kernel = self.Kernel.view(1, 1, self.Kernel.shape[0], self.Kernel.shape[1])
+        Kernel = self.Kernel.view(1, 1, self.Kernel.shape[0], self.Kernel.shape[1]).to(x.dtype)
         x = nn.functional.pixel_shuffle(x, 2)
         
         return nn.functional.conv2d(x.view(x.shape[0] * x.shape[1], 1, x.shape[2], x.shape[3]), Kernel, stride=1, padding=self.FilterRadius).view(*x.shape)
@@ -55,7 +55,7 @@ class InplaceDownsamplerReference(nn.Module):
         self.FilterRadius = len(Filter) // 2
         
     def forward(self, x):
-        Kernel = self.Kernel.view(1, 1, self.Kernel.shape[0], self.Kernel.shape[1])
+        Kernel = self.Kernel.view(1, 1, self.Kernel.shape[0], self.Kernel.shape[1]).to(x.dtype)
         y = nn.functional.conv2d(x.view(x.shape[0] * x.shape[1], 1, x.shape[2], x.shape[3]), Kernel, stride=1, padding=self.FilterRadius).view(*x.shape)
         
         return nn.functional.pixel_unshuffle(y, 2)
