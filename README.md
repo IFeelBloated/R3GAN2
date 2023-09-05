@@ -24,4 +24,9 @@ Model checkpoint: https://drive.google.com/file/d/1kFPBSdb7nO9V947-uHm0e_-2ZENEZ
 
 ### CIFAR-10
 
+Training command:
+```
+python train.py --outdir=./training-runs --data=./datasets/cifar10.zip --gpus=8 --batch=2048 --gamma=0.5 --glr=1e-4 --dlr=1e-4 --mirror=1 --aug=fixed --p=0.5 --tick=1 --cond=1 --preset=cifar
+```
+
 *placeholder*
