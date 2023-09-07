@@ -117,7 +117,6 @@ def training_loop(
     image_snapshot_ticks    = 50,       # How often to save image snapshots? None = disable.
     network_snapshot_ticks  = 50,       # How often to save network snapshots? None = disable.
     resume_pkl              = None,     # Network pickle to resume training from.
-    resume_kimg             = 0,        # First kimg to report when resuming training.
     cudnn_benchmark         = True,     # Enable torch.backends.cudnn.benchmark?
     abort_fn                = None,     # Callback function for determining whether to abort training. Must return consistent results across ranks.
     progress_fn             = None,     # Callback function for updating training progress. Called for all ranks.
@@ -155,7 +154,7 @@ def training_loop(
     G_ema = copy.deepcopy(G).eval()
 
     # Resume from existing pickle.
-    if (resume_pkl is not None) and (rank == 0):
+    if resume_pkl is not None:
         print(f'Resuming from "{resume_pkl}"')
         with dnnlib.util.open_url(resume_pkl) as f:
             resume_data = legacy.load_network_pkl(f)
@@ -195,9 +194,13 @@ def training_loop(
     phases = []
     
     opt = dnnlib.util.construct_class_by_name(params=D.parameters(), **D_opt_kwargs)
+    if resume_pkl is not None:
+        opt.load_state_dict(resume_data['D_opt_state'])
     phases += [dnnlib.EasyDict(name='D', module=D, opt=opt, interval=1, shift=0, batch_gpu=d_batch_gpu)]
     
     opt = dnnlib.util.construct_class_by_name(params=G.parameters(), **G_opt_kwargs)
+    if resume_pkl is not None:
+        opt.load_state_dict(resume_data['G_opt_state'])
     phases += [dnnlib.EasyDict(name='G', module=G, opt=opt, interval=1, shift=0, batch_gpu=g_batch_gpu)]
     
     for phase in phases:
@@ -239,7 +242,7 @@ def training_loop(
     if rank == 0:
         print(f'Training for {total_kimg} kimg...')
         print()
-    cur_nimg = resume_kimg * 1000
+    cur_nimg = resume_data['cur_nimg'] if resume_pkl is not None else 0
     cur_tick = 0
     tick_start_nimg = cur_nimg
     tick_start_time = time.time()
@@ -365,13 +368,15 @@ def training_loop(
         # Save image snapshot.
         if (rank == 0) and (image_snapshot_ticks is not None) and (done or cur_tick % image_snapshot_ticks == 0):
             images = torch.cat([G_ema(z, c).cpu() for z, c in zip(grid_z, grid_c)]).to(torch.float).numpy()
-            save_image_grid(images, os.path.join(run_dir, f'fakes{cur_nimg//1000:06d}.png'), drange=[-1,1], grid_size=grid_size)
+            save_image_grid(images, os.path.join(run_dir, f'fakes{cur_nimg//1000:09d}.png'), drange=[-1,1], grid_size=grid_size)
 
         # Save network snapshot.
         snapshot_pkl = None
         snapshot_data = None
         if (network_snapshot_ticks is not None) and (done or cur_tick % network_snapshot_ticks == 0):
-            snapshot_data = dict(G=G, D=D, G_ema=G_ema, augment_pipe=augment_pipe, training_set_kwargs=dict(training_set_kwargs))
+            snapshot_data = dict(G=G, D=D, G_ema=G_ema, augment_pipe=augment_pipe, training_set_kwargs=dict(training_set_kwargs), cur_nimg=cur_nimg)
+            for phase in phases:
+                snapshot_data[phase.name + '_opt_state'] = phase.opt.state_dict()
             for key, value in snapshot_data.items():
                 if isinstance(value, torch.nn.Module):
                     value = copy.deepcopy(value).eval().requires_grad_(False)
@@ -381,7 +386,7 @@ def training_loop(
                             torch.distributed.broadcast(param, src=0)
                     snapshot_data[key] = value.cpu()
                 del value # conserve memory
-            snapshot_pkl = os.path.join(run_dir, f'network-snapshot-{cur_nimg//1000:06d}.pkl')
+            snapshot_pkl = os.path.join(run_dir, f'network-snapshot-{cur_nimg//1000:09d}.pkl')
             if rank == 0:
                 with open(snapshot_pkl, 'wb') as f:
                     pickle.dump(snapshot_data, f)
