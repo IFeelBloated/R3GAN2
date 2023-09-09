@@ -246,7 +246,6 @@ def main(**kwargs):
     # Resume.
     if opts.resume is not None:
         c.resume_pkl = opts.resume
-        c.ada_kimg = 100 # Make ADA react faster at the beginning.
 
     # Performance-related toggles.
     if opts.nobench:

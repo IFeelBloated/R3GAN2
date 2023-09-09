@@ -178,6 +178,10 @@ def training_loop(
         augment_pipe.p.copy_(torch.as_tensor(augment_p))
         if ada_target is not None:
             ada_stats = training_stats.Collector(regex='Loss/signs/real')
+    if resume_pkl is not None:
+        training_stats._cumulative = copy.deepcopy(resume_data['_cumulative'])
+        augment_pipe = copy.deepcopy(resume_data['augment_pipe']).train().requires_grad_(False).to(device) if resume_data['augment_pipe'] is not None else None
+        ada_stats = copy.deepcopy(resume_data['ada_stats'])
 
     # Distribute across GPUs.
     if rank == 0:
@@ -374,7 +378,7 @@ def training_loop(
         snapshot_pkl = None
         snapshot_data = None
         if (network_snapshot_ticks is not None) and (done or cur_tick % network_snapshot_ticks == 0):
-            snapshot_data = dict(G=G, D=D, G_ema=G_ema, augment_pipe=augment_pipe, training_set_kwargs=dict(training_set_kwargs), cur_nimg=cur_nimg)
+            snapshot_data = dict(G=G, D=D, G_ema=G_ema, augment_pipe=augment_pipe, ada_stats=ada_stats, training_set_kwargs=dict(training_set_kwargs), cur_nimg=cur_nimg, _cumulative=training_stats._cumulative)
             for phase in phases:
                 snapshot_data[phase.name + '_opt_state'] = phase.opt.state_dict()
             for key, value in snapshot_data.items():
