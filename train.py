@@ -188,6 +188,8 @@ def main(**kwargs):
         FP16Stages = [-1, -2, -3, -4]
         NoiseDimension = 64
         
+        c.ema_kimg = 500
+        
     if opts.preset == 'cifar':
         WidthPerStage = [3 * x // 4 for x in [1024, 1024, 1024, 1024]]
         BlocksPerStage = [2 * x for x in [1, 1, 1, 1]]
@@ -197,6 +199,8 @@ def main(**kwargs):
         
         c.G_kwargs.ConditionEmbeddingDimension = NoiseDimension
         c.D_kwargs.ConditionEmbeddingDimension = WidthPerStage[0]
+        
+        c.ema_kimg = 500
     
     
     c.G_kwargs.NoiseDimension = NoiseDimension
@@ -232,8 +236,6 @@ def main(**kwargs):
     if any(not metric_main.is_valid_metric(metric) for metric in c.metrics):
         raise click.ClickException('\n'.join(['--metrics can only contain the following values:'] + metric_main.list_valid_metrics()))
 
-    # Base configuration.
-    c.ema_kimg = c.batch_size * 10 / 32
             
     # Augmentation.
     if opts.aug != 'noaug':
