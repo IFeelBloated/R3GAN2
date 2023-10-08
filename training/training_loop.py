@@ -106,11 +106,8 @@ def training_loop(
     d_batch_gpu             = 4,        # Number of samples processed at a time by one GPU.
     ema_kimg                = 10,       # Half-life of the exponential moving average (EMA) of generator weights.
     ema_rampup              = 0.05,     # EMA ramp-up coefficient. None = no rampup.
-    G_reg_interval          = None,     # How often to perform regularization for G? None = disable lazy regularization.
-    D_reg_interval          = None,     # How often to perform regularization for D? None = disable lazy regularization.
     augment_p               = 0,        # Initial value of augmentation probability.
     ada_target              = None,     # ADA target value. None = fixed p.
-    ada_interval            = 4,        # How often to perform ADA adjustment?
     ada_kimg                = 500,      # ADA adjustment speed, measured in how many kimg it takes for p to increase/decrease by one unit.
     total_kimg              = 25000,    # Total length of the training, measured in thousands of real images.
     kimg_per_tick           = 4,        # Progress snapshot interval.
@@ -181,9 +178,7 @@ def training_loop(
         if ada_target is not None:
             ada_stats = training_stats.Collector(regex='Loss/signs/real')
     if resume_pkl is not None:
-        training_stats._cumulative = copy.deepcopy(resume_data['_cumulative'])
         augment_pipe = copy.deepcopy(resume_data['augment_pipe']).train().requires_grad_(False).to(device) if resume_data['augment_pipe'] is not None else None
-        ada_stats = copy.deepcopy(resume_data['ada_stats'])
 
     # Distribute across GPUs.
     if rank == 0:
@@ -196,18 +191,18 @@ def training_loop(
     # Setup training phases.
     if rank == 0:
         print('Setting up training phases...')
-    loss = dnnlib.util.construct_class_by_name(device=device, G=G, D=D, augment_pipe=augment_pipe, **loss_kwargs) # subclass of training.loss.Loss
+    loss = dnnlib.util.construct_class_by_name(G=G, D=D, augment_pipe=augment_pipe, **loss_kwargs) # subclass of training.loss.Loss
     phases = []
     
     opt = dnnlib.util.construct_class_by_name(params=D.parameters(), **D_opt_kwargs)
     if resume_pkl is not None:
         opt.load_state_dict(resume_data['D_opt_state'])
-    phases += [dnnlib.EasyDict(name='D', module=D, opt=opt, interval=1, shift=0, batch_gpu=d_batch_gpu)]
+    phases += [dnnlib.EasyDict(name='D', module=D, opt=opt, batch_gpu=d_batch_gpu)]
     
     opt = dnnlib.util.construct_class_by_name(params=G.parameters(), **G_opt_kwargs)
     if resume_pkl is not None:
         opt.load_state_dict(resume_data['G_opt_state'])
-    phases += [dnnlib.EasyDict(name='G', module=G, opt=opt, interval=1, shift=0, batch_gpu=g_batch_gpu)]
+    phases += [dnnlib.EasyDict(name='G', module=G, opt=opt, batch_gpu=g_batch_gpu)]
     
     for phase in phases:
         phase.start_event = None
@@ -290,8 +285,6 @@ def training_loop(
             
         # Execute training phases.
         for phase, phase_gen_z, phase_real_img, phase_real_c in zip(phases, all_gen_z, all_real_img, all_real_c):
-            if batch_idx % phase.interval != phase.shift:
-                continue
             if phase.start_event is not None:
                 phase.start_event.record(torch.cuda.current_stream(device))
 
@@ -299,7 +292,7 @@ def training_loop(
             phase.opt.zero_grad(set_to_none=True)
             phase.module.requires_grad_(True)
             for real_img, real_c, gen_z in zip(phase_real_img, phase_real_c, phase_gen_z):
-                loss.accumulate_gradients(phase=phase.name, real_img=real_img, real_c=real_c, gen_z=gen_z, gain=phase.interval * num_gpus * phase.batch_gpu / batch_size, cur_nimg=cur_nimg)
+                loss.accumulate_gradients(phase=phase.name, real_img=real_img, real_c=real_c, gen_z=gen_z, gain=num_gpus * phase.batch_gpu / batch_size)
             phase.module.requires_grad_(False)
         
             # Update weights.
@@ -335,9 +328,9 @@ def training_loop(
         batch_idx += 1
 
         # Execute ADA heuristic.
-        if (ada_stats is not None) and (batch_idx % ada_interval == 0):
+        if ada_stats is not None:
             ada_stats.update()
-            adjust = np.sign(ada_stats['Loss/signs/real'] - ada_target) * (batch_size * ada_interval) / (ada_kimg * 1000)
+            adjust = np.sign(ada_stats['Loss/signs/real'] - ada_target) * batch_size / (ada_kimg * 1000)
             augment_pipe.p.copy_((augment_pipe.p + adjust).max(misc.constant(0, device=device)))
 
         # Perform maintenance tasks once per tick.
@@ -380,7 +373,7 @@ def training_loop(
         snapshot_pkl = None
         snapshot_data = None
         if (network_snapshot_ticks is not None) and (done or cur_tick % network_snapshot_ticks == 0):
-            snapshot_data = dict(G=G, D=D, G_ema=G_ema, augment_pipe=augment_pipe, ada_stats=ada_stats, training_set_kwargs=dict(training_set_kwargs), cur_nimg=cur_nimg, _cumulative=training_stats._cumulative)
+            snapshot_data = dict(G=G, D=D, G_ema=G_ema, augment_pipe=augment_pipe, training_set_kwargs=dict(training_set_kwargs), cur_nimg=cur_nimg)
             for phase in phases:
                 snapshot_data[phase.name + '_opt_state'] = phase.opt.state_dict()
             for key, value in snapshot_data.items():

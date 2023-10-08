@@ -15,7 +15,7 @@ import torch
 #----------------------------------------------------------------------------
 
 class BaselineGANLoss:
-    def __init__(self, device, G, D, augment_pipe=None, gamma=10, style_mixing_prob=0, pl_weight=0, pl_batch_shrink=2, pl_decay=0.01, pl_no_weight_grad=False, blur_init_sigma=0, blur_fade_kimg=0):
+    def __init__(self, G, D, augment_pipe=None, gamma=10):
         self.gamma = gamma
         self.trainer = AdversarialTraining(G, D)
         if augment_pipe is not None:
@@ -23,7 +23,7 @@ class BaselineGANLoss:
         else:
             self.preprocessor = lambda x: x
         
-    def accumulate_gradients(self, phase, real_img, real_c, gen_z, gain, cur_nimg):
+    def accumulate_gradients(self, phase, real_img, real_c, gen_z, gain):
         # G
         if phase == 'G':
             AdversarialLoss, RelativisticLogits = self.trainer.AccumulateGeneratorGradients(gen_z, real_img, real_c, gain, self.preprocessor)
