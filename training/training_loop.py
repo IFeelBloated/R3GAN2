@@ -87,6 +87,23 @@ def save_image_grid(img, fname, drange, grid_size):
 
 #----------------------------------------------------------------------------
 
+def remap_optimizer_state_dict(state_dict, device):
+    state_dict = copy.deepcopy(state_dict)
+    for param in state_dict['state'].values():
+        if isinstance(param, torch.Tensor):
+            param.data = param.data.to(device)
+            if param._grad is not None:
+                param._grad.data = param._grad.data.to(device)
+        elif isinstance(param, dict):
+            for subparam in param.values():
+                if isinstance(subparam, torch.Tensor):
+                    subparam.data = subparam.data.to(device)
+                    if subparam._grad is not None:
+                        subparam._grad.data = subparam._grad.data.to(device)
+    return state_dict
+
+#----------------------------------------------------------------------------
+
 def training_loop(
     run_dir                 = '.',      # Output directory.
     training_set_kwargs     = {},       # Options for training set.
@@ -152,11 +169,10 @@ def training_loop(
 
     # Resume from existing pickle.
     if resume_pkl is not None:
-        if rank == 0:
-            print(f'Resuming from "{resume_pkl}"')
         with dnnlib.util.open_url(resume_pkl) as f:
             resume_data = legacy.load_network_pkl(f)
         if rank == 0:
+            print(f'Resuming from "{resume_pkl}"')
             for name, module in [('G', G), ('D', D), ('G_ema', G_ema)]:
                 misc.copy_params_and_buffers(resume_data[name], module, require_all=False)
 
@@ -177,8 +193,9 @@ def training_loop(
         augment_pipe.p.copy_(torch.as_tensor(augment_p))
         if ada_target is not None:
             ada_stats = training_stats.Collector(regex='Loss/signs/real')
-    if resume_pkl is not None:
-        augment_pipe = copy.deepcopy(resume_data['augment_pipe']).train().requires_grad_(False).to(device) if resume_data['augment_pipe'] is not None else None
+    if (resume_pkl is not None) and (rank == 0):
+        if augment_pipe is not None and resume_data['augment_pipe'] is not None:
+            misc.copy_params_and_buffers(resume_data['augment_pipe'], augment_pipe, require_all=False)
 
     # Distribute across GPUs.
     if rank == 0:
@@ -196,12 +213,16 @@ def training_loop(
     
     opt = dnnlib.util.construct_class_by_name(params=D.parameters(), **D_opt_kwargs)
     if resume_pkl is not None:
-        opt.load_state_dict(resume_data['D_opt_state'])
+        opt.load_state_dict(remap_optimizer_state_dict(resume_data['D_opt_state'], device))
+        for group in opt.param_groups:
+            group['lr'] = D_opt_kwargs['lr']
     phases += [dnnlib.EasyDict(name='D', module=D, opt=opt, batch_gpu=d_batch_gpu)]
     
     opt = dnnlib.util.construct_class_by_name(params=G.parameters(), **G_opt_kwargs)
     if resume_pkl is not None:
-        opt.load_state_dict(resume_data['G_opt_state'])
+        opt.load_state_dict(remap_optimizer_state_dict(resume_data['G_opt_state'], device))
+        for group in opt.param_groups:
+            group['lr'] = G_opt_kwargs['lr']
     phases += [dnnlib.EasyDict(name='G', module=G, opt=opt, batch_gpu=g_batch_gpu)]
     
     for phase in phases:
@@ -375,7 +396,7 @@ def training_loop(
         if (network_snapshot_ticks is not None) and (done or cur_tick % network_snapshot_ticks == 0):
             snapshot_data = dict(G=G, D=D, G_ema=G_ema, augment_pipe=augment_pipe, training_set_kwargs=dict(training_set_kwargs), cur_nimg=cur_nimg)
             for phase in phases:
-                snapshot_data[phase.name + '_opt_state'] = phase.opt.state_dict()
+                snapshot_data[phase.name + '_opt_state'] = remap_optimizer_state_dict(phase.opt.state_dict(), 'cpu')
             for key, value in snapshot_data.items():
                 if isinstance(value, torch.nn.Module):
                     value = copy.deepcopy(value).eval().requires_grad_(False)
