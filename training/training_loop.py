@@ -26,6 +26,17 @@ from torch_utils.ops import grid_sample_gradfix
 import legacy
 from metrics import metric_main
 
+def cosine_decay_with_warmup(cur_nimg, base_value, total_nimg, final_value=0.0, warmup_value=0.0, warmup_nimg=0, hold_base_value_nimg=0):
+    decay = 0.5 * (1 + np.cos(np.pi * (cur_nimg - warmup_nimg - hold_base_value_nimg) / float(total_nimg - warmup_nimg - hold_base_value_nimg)))
+    cur_value = base_value + (1 - decay) * (final_value - base_value)
+    if hold_base_value_nimg > 0:
+        cur_value = np.where(cur_nimg > warmup_nimg + hold_base_value_nimg, cur_value, base_value)
+    if warmup_nimg > 0:
+        slope = (base_value - warmup_value) / warmup_nimg
+        warmup_v = slope * cur_nimg + warmup_value
+        cur_value = np.where(cur_nimg < warmup_nimg, warmup_v, cur_value)
+    return float(np.where(cur_nimg > total_nimg, final_value, cur_value))
+
 #----------------------------------------------------------------------------
 
 def setup_snapshot_image_grid(training_set, random_seed=0):
@@ -112,8 +123,11 @@ def training_loop(
     D_kwargs                = {},       # Options for discriminator network.
     G_opt_kwargs            = {},       # Options for generator optimizer.
     D_opt_kwargs            = {},       # Options for discriminator optimizer.
+    lr_scheduler            = None,
+    beta_scheduler          = None,
     augment_kwargs          = None,     # Options for augmentation pipeline. None = disable.
     loss_kwargs             = {},       # Options for loss function.
+    gamma_scheduler         = None,
     metrics                 = [],       # Metrics to evaluate during training.
     random_seed             = 0,        # Global random seed.
     num_gpus                = 1,        # Number of GPUs participating in the training.
@@ -121,10 +135,9 @@ def training_loop(
     batch_size              = 4,        # Total batch size for one training iteration. Can be larger than batch_gpu * num_gpus.
     g_batch_gpu             = 4,        # Number of samples processed at a time by one GPU.
     d_batch_gpu             = 4,        # Number of samples processed at a time by one GPU.
-    ema_kimg                = 10,       # Half-life of the exponential moving average (EMA) of generator weights.
-    ema_rampup              = 0.05,     # EMA ramp-up coefficient. None = no rampup.
+    ema_scheduler           = None,
     augment_p               = 0,        # Initial value of augmentation probability.
-    ada_target              = None,     # ADA target value. None = fixed p.
+    ada_scheduler           = None,
     ada_kimg                = 500,      # ADA adjustment speed, measured in how many kimg it takes for p to increase/decrease by one unit.
     total_kimg              = 25000,    # Total length of the training, measured in thousands of real images.
     kimg_per_tick           = 4,        # Progress snapshot interval.
@@ -188,10 +201,10 @@ def training_loop(
         print('Setting up augmentation...')
     augment_pipe = None
     ada_stats = None
-    if (augment_kwargs is not None) and (augment_p > 0 or ada_target is not None):
+    if (augment_kwargs is not None) and (augment_p > 0 or ada_scheduler is not None):
         augment_pipe = dnnlib.util.construct_class_by_name(**augment_kwargs).train().requires_grad_(False).to(device) # subclass of torch.nn.Module
         augment_pipe.p.copy_(torch.as_tensor(augment_p))
-        if ada_target is not None:
+        if ada_scheduler is not None:
             ada_stats = training_stats.Collector(regex='Loss/signs/real')
     if (resume_pkl is not None) and (rank == 0):
         if augment_pipe is not None and resume_data['augment_pipe'] is not None:
@@ -214,15 +227,11 @@ def training_loop(
     opt = dnnlib.util.construct_class_by_name(params=D.parameters(), **D_opt_kwargs)
     if resume_pkl is not None:
         opt.load_state_dict(remap_optimizer_state_dict(resume_data['D_opt_state'], device))
-        for group in opt.param_groups:
-            group['lr'] = D_opt_kwargs['lr']
     phases += [dnnlib.EasyDict(name='D', module=D, opt=opt, batch_gpu=d_batch_gpu)]
     
     opt = dnnlib.util.construct_class_by_name(params=G.parameters(), **G_opt_kwargs)
     if resume_pkl is not None:
         opt.load_state_dict(remap_optimizer_state_dict(resume_data['G_opt_state'], device))
-        for group in opt.param_groups:
-            group['lr'] = G_opt_kwargs['lr']
     phases += [dnnlib.EasyDict(name='G', module=G, opt=opt, batch_gpu=g_batch_gpu)]
     
     for phase in phases:
@@ -303,7 +312,12 @@ def training_loop(
             all_real_c += [G_img_c.detach().clone().to(device).split(g_batch_gpu)]
             all_gen_z += [G_z.detach().clone().split(g_batch_gpu)]
             
-            
+        cur_lr = cosine_decay_with_warmup(cur_nimg, **lr_scheduler)
+        cur_beta2 = cosine_decay_with_warmup(cur_nimg, **beta_scheduler)
+        cur_gamma = cosine_decay_with_warmup(cur_nimg, **gamma_scheduler)
+        ema_nimg = cosine_decay_with_warmup(cur_nimg, **ema_scheduler)
+        ada_target = cosine_decay_with_warmup(cur_nimg, **ada_scheduler)
+        
         # Execute training phases.
         for phase, phase_gen_z, phase_real_img, phase_real_c in zip(phases, all_gen_z, all_real_img, all_real_c):
             if phase.start_event is not None:
@@ -313,10 +327,14 @@ def training_loop(
             phase.opt.zero_grad(set_to_none=True)
             phase.module.requires_grad_(True)
             for real_img, real_c, gen_z in zip(phase_real_img, phase_real_c, phase_gen_z):
-                loss.accumulate_gradients(phase=phase.name, real_img=real_img, real_c=real_c, gen_z=gen_z, gain=num_gpus * phase.batch_gpu / batch_size)
+                loss.accumulate_gradients(phase=phase.name, real_img=real_img, real_c=real_c, gen_z=gen_z, gamma=cur_gamma, gain=num_gpus * phase.batch_gpu / batch_size)
             phase.module.requires_grad_(False)
         
-            # Update weights.
+            # Update weights.  
+            for g in phase.opt.param_groups:
+                g['lr'] = cur_lr
+                g['betas'] = (0, cur_beta2)
+                      
             with torch.autograd.profiler.record_function(phase.name + '_opt'):
                 params = [param for param in phase.module.parameters() if param.grad is not None]
                 if len(params) > 0:
@@ -335,9 +353,6 @@ def training_loop(
 
         # Update G_ema.
         with torch.autograd.profiler.record_function('Gema'):
-            ema_nimg = ema_kimg * 1000
-            if ema_rampup is not None:
-                ema_nimg = min(ema_nimg, cur_nimg * ema_rampup)
             ema_beta = 0.5 ** (batch_size / max(ema_nimg, 1e-8))
             for p_ema, p in zip(G_ema.parameters(), G.parameters()):
                 p_ema.copy_(p.lerp(p_ema, ema_beta))
@@ -373,6 +388,11 @@ def training_loop(
         fields += [f"reserved {training_stats.report0('Resources/peak_gpu_mem_reserved_gb', torch.cuda.max_memory_reserved(device) / 2**30):<6.2f}"]
         torch.cuda.reset_peak_memory_stats()
         fields += [f"augment {training_stats.report0('Progress/augment', float(augment_pipe.p.cpu()) if augment_pipe is not None else 0):.3f}"]
+        training_stats.report0('Progress/lr', cur_lr)
+        training_stats.report0('Progress/ema_kimg', ema_nimg / 1e3)
+        training_stats.report0('Progress/ada_target', ada_target)
+        training_stats.report0('Progress/beta2', cur_beta2)
+        training_stats.report0('Progress/gamma', cur_gamma)
         training_stats.report0('Timing/total_hours', (tick_end_time - start_time) / (60 * 60))
         training_stats.report0('Timing/total_days', (tick_end_time - start_time) / (24 * 60 * 60))
         if rank == 0:

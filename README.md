@@ -10,23 +10,23 @@ Our code base is built on top of [stylegan3](https://github.com/NVlabs/stylegan3
 
 Training command:
 ```
-python train.py --outdir=./training-runs --data=./datasets/ffhq-256x256.zip --gpus=8 --batch=256 --gamma=50 --glr=5e-5 --dlr=5e-5 --mirror=1 --aug=fixed --p=0.15 --tick=1
+*placeholder*
 ```
 
-Model checkpoint: https://drive.google.com/file/d/1kFPBSdb7nO9V947-uHm0e_-2ZENEZKpY/view?usp=sharing
+Model checkpoint: *placeholder*
 
 | Model | FID | Precision | Recall
 |:--:|:--:|:--:|:--:|
 | StyleGAN2 | 3.78 | 0.69 | 0.43 |
 | StyleGAN3-T | 4.81 | 0.64 | 0.50 |
 | StyleGAN3-R | 3.92 | 0.69 | 0.47 |
-| Ours | 3.37 | 0.70 | 0.46 |
+| Ours | ? | ? | ? |
 
 ### CIFAR-10
 
 Training command:
 ```
-python train.py --outdir=./training-runs --data=./datasets/cifar10.zip --gpus=8 --batch=2048 --gamma=0.5 --glr=1e-4 --dlr=1e-4 --mirror=1 --aug=fixed --p=0.5 --tick=1 --cond=1 --preset=cifar
+python train.py --outdir=./training-runs --data=./datasets/cifar10.zip --gpus=8 --batch=512 --mirror=1 --aug=ada --cond=1 --preset=cifar --tick=1 --snap=200
 ```
 
 *placeholder*

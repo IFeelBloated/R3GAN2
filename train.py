@@ -125,20 +125,16 @@ def parse_comma_separated_list(s):
 @click.option('--data',         help='Training data', metavar='[ZIP|DIR]',                      type=str, required=True)
 @click.option('--gpus',         help='Number of GPUs to use', metavar='INT',                    type=click.IntRange(min=1), required=True)
 @click.option('--batch',        help='Total batch size', metavar='INT',                         type=click.IntRange(min=1), required=True)
-@click.option('--glr',          help='G learning rate', metavar='FLOAT',                        type=click.FloatRange(min=0), required=True)
-@click.option('--dlr',          help='D learning rate', metavar='FLOAT',                        type=click.FloatRange(min=0), required=True)
-@click.option('--gamma',        help='Gradient penalty weight', metavar='FLOAT',                type=click.FloatRange(min=0), required=True)
+@click.option('--preset',       help='Preset configs', metavar='STR',                           type=str, required=True)
 
 # Optional features.
 @click.option('--cond',         help='Train conditional model', metavar='BOOL',                 type=bool, default=False, show_default=True)
 @click.option('--mirror',       help='Enable dataset x-flips', metavar='BOOL',                  type=bool, default=False, show_default=True)
 @click.option('--aug',          help='Augmentation mode',                                       type=click.Choice(['noaug', 'ada', 'fixed']), default='ada', show_default=True)
 @click.option('--resume',       help='Resume from given network pickle', metavar='[PATH|URL]',  type=str)
-@click.option('--preset',       help='Preset configs', metavar='STR',                           type=str, default='FFHQ256', show_default=True)
 
 # Misc hyperparameters.
 @click.option('--p',            help='Probability for --aug=fixed', metavar='FLOAT',            type=click.FloatRange(min=0, max=1), default=0.2, show_default=True)
-@click.option('--target',       help='Target value for --aug=ada', metavar='FLOAT',             type=click.FloatRange(min=0, max=1), default=0.6, show_default=True)
 @click.option('--g-batch-gpu',  help='Limit batch size per GPU for G', metavar='INT',           type=click.IntRange(min=1))
 @click.option('--d-batch-gpu',  help='Limit batch size per GPU for D', metavar='INT',           type=click.IntRange(min=1))
 
@@ -161,8 +157,8 @@ def main(**kwargs):
     c.G_kwargs = dnnlib.EasyDict(class_name='training.networks_baseline.Generator')
     c.D_kwargs = dnnlib.EasyDict(class_name='training.networks_baseline.Discriminator')
     
-    c.G_opt_kwargs = dnnlib.EasyDict(class_name='torch.optim.Adam', betas=[0,0.99], eps=1e-8)
-    c.D_opt_kwargs = dnnlib.EasyDict(class_name='torch.optim.Adam', betas=[0,0.99], eps=1e-8)
+    c.G_opt_kwargs = dnnlib.EasyDict(class_name='torch.optim.Adam', betas=[0,0], eps=1e-8)
+    c.D_opt_kwargs = dnnlib.EasyDict(class_name='torch.optim.Adam', betas=[0,0], eps=1e-8)
     
     c.loss_kwargs = dnnlib.EasyDict(class_name='training.loss.BaselineGANLoss')
     c.data_loader_kwargs = dnnlib.EasyDict(pin_memory=True, prefetch_factor=2)
@@ -188,7 +184,7 @@ def main(**kwargs):
         FP16Stages = [-1, -2, -3, -4]
         NoiseDimension = 64
         
-        c.ema_kimg = 500
+        ema_nimg = 500 * 1000
         
     if opts.preset == 'cifar':
         WidthPerStage = [3 * x // 4 for x in [1024, 1024, 1024, 1024]]
@@ -200,7 +196,14 @@ def main(**kwargs):
         c.G_kwargs.ConditionEmbeddingDimension = NoiseDimension
         c.D_kwargs.ConditionEmbeddingDimension = WidthPerStage[0]
         
-        c.ema_kimg = 500
+        ema_nimg = 5000 * 1000
+        decay_nimg = 2e7
+        
+        c.ema_scheduler = { 'base_value': 0, 'final_value': ema_nimg, 'total_nimg': decay_nimg }
+        c.ada_scheduler = { 'base_value': 1.01, 'final_value': 0.35, 'total_nimg': decay_nimg }
+        c.lr_scheduler = { 'base_value': 2e-4, 'final_value': 5e-5, 'total_nimg': decay_nimg }
+        c.gamma_scheduler = { 'base_value': 0.1, 'final_value': 0.01, 'total_nimg': decay_nimg }
+        c.beta_scheduler = { 'base_value': 0.9, 'final_value': 0.999, 'total_nimg': decay_nimg }
     
     
     c.G_kwargs.NoiseDimension = NoiseDimension
@@ -216,10 +219,6 @@ def main(**kwargs):
     c.D_kwargs.ExpansionFactor = 2
     c.D_kwargs.FP16Stages = [x + len(FP16Stages) for x in FP16Stages]
     
-    c.loss_kwargs.gamma = opts.gamma
-    
-    c.G_opt_kwargs.lr = opts.glr
-    c.D_opt_kwargs.lr = opts.dlr
     
     c.metrics = opts.metrics
     c.total_kimg = opts.kimg
@@ -239,9 +238,7 @@ def main(**kwargs):
             
     # Augmentation.
     if opts.aug != 'noaug':
-        c.augment_kwargs = dnnlib.EasyDict(class_name='training.augment.AugmentPipe', xflip=1, rotate90=1, xint=1, scale=1, rotate=1, aniso=1, xfrac=1, brightness=1, contrast=1, lumaflip=1, hue=1, saturation=1, cutout=1)
-        if opts.aug == 'ada':
-            c.ada_target = opts.target
+        c.augment_kwargs = dnnlib.EasyDict(class_name='training.augment.AugmentPipe', xflip=1, rotate90=1, xint=1, scale=1, rotate=1, aniso=1, xfrac=1, brightness=0.5, contrast=0.5, lumaflip=0.5, hue=0.5, saturation=0.5, cutout=1)
         if opts.aug == 'fixed':
             c.augment_p = opts.p
 
@@ -254,7 +251,7 @@ def main(**kwargs):
         c.cudnn_benchmark = False
 
     # Description string.
-    desc = f'{dataset_name:s}-gpus{c.num_gpus:d}-batch{c.batch_size:d}-gamma{c.loss_kwargs.gamma:g}'
+    desc = f'{dataset_name:s}-gpus{c.num_gpus:d}-batch{c.batch_size:d}'
     if opts.desc is not None:
         desc += f'-{opts.desc}'
 

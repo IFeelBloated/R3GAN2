@@ -15,15 +15,14 @@ import torch
 #----------------------------------------------------------------------------
 
 class BaselineGANLoss:
-    def __init__(self, G, D, augment_pipe=None, gamma=10):
-        self.gamma = gamma
+    def __init__(self, G, D, augment_pipe=None):
         self.trainer = AdversarialTraining(G, D)
         if augment_pipe is not None:
             self.preprocessor = lambda x: augment_pipe(x.to(torch.float32)).to(x.dtype)
         else:
             self.preprocessor = lambda x: x
         
-    def accumulate_gradients(self, phase, real_img, real_c, gen_z, gain):
+    def accumulate_gradients(self, phase, real_img, real_c, gen_z, gamma, gain):
         # G
         if phase == 'G':
             AdversarialLoss, RelativisticLogits = self.trainer.AccumulateGeneratorGradients(gen_z, real_img, real_c, gain, self.preprocessor)
@@ -34,7 +33,7 @@ class BaselineGANLoss:
             
         # D
         if phase == 'D':
-            AdversarialLoss, RelativisticLogits, R1Penalty, R2Penalty = self.trainer.AccumulateDiscriminatorGradients(gen_z, real_img, real_c, self.gamma, gain, self.preprocessor)
+            AdversarialLoss, RelativisticLogits, R1Penalty, R2Penalty = self.trainer.AccumulateDiscriminatorGradients(gen_z, real_img, real_c, gamma, gain, self.preprocessor)
             
             training_stats.report('Loss/scores/real', RelativisticLogits)
             training_stats.report('Loss/signs/real', RelativisticLogits.sign())
