@@ -265,7 +265,7 @@ def training_loop(
     stats_jsonl = None
     stats_tfevents = None
     if rank == 0:
-        stats_jsonl = fsspec.open(os.path.join(run_dir, 'stats.jsonl'), 'wta')
+        stats_jsonl = fsspec.open(os.path.join(run_dir, 'stats.jsonl'), 'wt')
         #stats_jsonl = None # TODO fix.
         try:
             import torch.utils.tensorboard as tensorboard
@@ -480,7 +480,7 @@ def training_loop(
             try:
                 stats_tfevents.flush()
             except AttributeError:
-                pass
+                passl
         if progress_fn is not None:
             progress_fn(cur_nimg // 1000, total_kimg)
 
