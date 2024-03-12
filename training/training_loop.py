@@ -463,7 +463,11 @@ def training_loop(
             fields = dict(stats_dict, timestamp=timestamp)
             with stats_jsonl as f:
                 f.write(json.dumps(fields) + '\n')
-                f.flush()
+                try:
+                    f.flush()
+                except AttributeError:
+                    pass # workaround for S3FS bug
+                #f.flush()
             #stats_jsonl.write(json.dumps(fields) + '\n')
             #stats_jsonl.flush()
         if stats_tfevents is not None:
