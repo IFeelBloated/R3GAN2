@@ -477,7 +477,10 @@ def training_loop(
                 stats_tfevents.add_scalar(name, value.mean, global_step=global_step, walltime=walltime)
             for name, value in stats_metrics.items():
                 stats_tfevents.add_scalar(f'Metrics/{name}', value, global_step=global_step, walltime=walltime)
-            stats_tfevents.flush()
+            try:
+                stats_tfevents.flush()
+            except AttributeError:
+                pass
         if progress_fn is not None:
             progress_fn(cur_nimg // 1000, total_kimg)
 
