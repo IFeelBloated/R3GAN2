@@ -13,6 +13,8 @@ import torch
 import warnings
 import dnnlib
 
+import fsspec
+
 #----------------------------------------------------------------------------
 # Cached construction of constant tensors. Avoids CPU=>GPU copy when the
 # same constant is used multiple times.
@@ -247,3 +249,8 @@ def print_module_summary(module, inputs, max_nesting=3, skip_redundant=True):
     return outputs
 
 #----------------------------------------------------------------------------
+
+def fsspec_exists(fname):
+    fs = fsspec.core.url_to_fs(fname)
+    return fs.exists(fname)
+    #fsspec.exists(fname)

@@ -14,6 +14,7 @@ import copy
 import json
 import pickle
 import psutil
+import fsspec
 import PIL.Image
 import numpy as np
 import torch
@@ -24,6 +25,7 @@ from torch_utils.ops import conv2d_gradfix
 from torch_utils.ops import grid_sample_gradfix
 
 import legacy
+import tensorflow_io
 from metrics import metric_main
 
 def cosine_decay_with_warmup(cur_nimg, base_value, total_nimg, final_value=0.0, warmup_value=0.0, warmup_nimg=0, hold_base_value_nimg=0):
@@ -91,10 +93,11 @@ def save_image_grid(img, fname, drange, grid_size):
     img = img.reshape([gh * H, gw * W, C])
 
     assert C in [1, 3]
-    if C == 1:
-        PIL.Image.fromarray(img[:, :, 0], 'L').save(fname)
-    if C == 3:
-        PIL.Image.fromarray(img, 'RGB').save(fname)
+    with fsspec.open(fname, 'wb') as f:
+        if C == 1:
+            PIL.Image.fromarray(img[:, :, 0], 'L').save(f, format='PNG')
+        if C == 3:
+            PIL.Image.fromarray(img, 'RGB').save(f, format='PNG')
 
 #----------------------------------------------------------------------------
 
@@ -262,7 +265,8 @@ def training_loop(
     stats_jsonl = None
     stats_tfevents = None
     if rank == 0:
-        stats_jsonl = open(os.path.join(run_dir, 'stats.jsonl'), 'wt')
+        stats_jsonl = fsspec.open(os.path.join(run_dir, 'stats.jsonl'), 'wta')
+        #stats_jsonl = None # TODO fix.
         try:
             import torch.utils.tensorboard as tensorboard
             stats_tfevents = tensorboard.SummaryWriter(run_dir)
@@ -428,7 +432,7 @@ def training_loop(
                 del value # conserve memory
             snapshot_pkl = os.path.join(run_dir, f'network-snapshot-{cur_nimg//1000:09d}.pkl')
             if rank == 0:
-                with open(snapshot_pkl, 'wb') as f:
+                with fsspec.open(snapshot_pkl, 'wb') as f:
                     pickle.dump(snapshot_data, f)
 
         # Evaluate metrics.
@@ -457,8 +461,10 @@ def training_loop(
         timestamp = time.time()
         if stats_jsonl is not None:
             fields = dict(stats_dict, timestamp=timestamp)
-            stats_jsonl.write(json.dumps(fields) + '\n')
-            stats_jsonl.flush()
+            with stats_jsonl as f:
+                f.write(json.dumps(fields) + '\n')
+            #stats_jsonl.write(json.dumps(fields) + '\n')
+            #stats_jsonl.flush()
         if stats_tfevents is not None:
             global_step = int(cur_nimg / 1e3)
             walltime = timestamp - start_time

@@ -13,26 +13,32 @@ import json
 import tempfile
 import torch
 
+import fsspec
 import dnnlib
 from training import training_loop
 from metrics import metric_main
 from torch_utils import training_stats
 from torch_utils import custom_ops
 
+
 #----------------------------------------------------------------------------
 
 def subprocess_fn(rank, c, temp_dir):
-    dnnlib.util.Logger(file_name=os.path.join(c.run_dir, 'log.txt'), file_mode='a', should_flush=True)
+    # TODO Fix this for fsspec
+    # dnnlib.util.Logger(file_name=os.path.join(c.run_dir, 'log.txt'), file_mode='a', should_flush=True)
 
     # Init torch.distributed.
     if c.num_gpus > 1:
         init_file = os.path.abspath(os.path.join(temp_dir, '.torch_distributed_init'))
         if os.name == 'nt':
-            init_method = 'file:///' + init_file.replace('\\', '/')
-            torch.distributed.init_process_group(backend='gloo', init_method=init_method, rank=rank, world_size=c.num_gpus)
+            #init_method = 'file:///' + init_file.replace('\\', '/')
+            torch.distributed.init_process_group(backend='gloo', #init_method=init_method, 
+                rank=rank, world_size=c.num_gpus)
         else:
-            init_method = f'file://{init_file}'
-            torch.distributed.init_process_group(backend='nccl', init_method=init_method, rank=rank, world_size=c.num_gpus)
+            #init_method = f'file://{init_file}'
+            torch.distributed.init_process_group(backend='nccl', 
+            #init_method=init_method, 
+                rank=rank, world_size=c.num_gpus)
 
     # Init torch_utils.
     sync_device = torch.device('cuda', rank) if c.num_gpus > 1 else None
@@ -47,16 +53,19 @@ def subprocess_fn(rank, c, temp_dir):
 
 def launch_training(c, desc, outdir, dry_run):
     dnnlib.util.Logger(should_flush=True)
-
-    # Pick output directory.
-    prev_run_dirs = []
-    if os.path.isdir(outdir):
-        prev_run_dirs = [x for x in os.listdir(outdir) if os.path.isdir(os.path.join(outdir, x))]
-    prev_run_ids = [re.match(r'^\d+', x) for x in prev_run_dirs]
-    prev_run_ids = [int(x.group()) for x in prev_run_ids if x is not None]
-    cur_run_id = max(prev_run_ids, default=-1) + 1
-    c.run_dir = os.path.join(outdir, f'{cur_run_id:05d}-{desc}')
-    assert not os.path.exists(c.run_dir)
+    
+    if not c.no_subdir:
+        prev_run_dirs = []
+        if os.path.isdir(outdir):
+            prev_run_dirs = [x for x in os.listdir(outdir) if os.path.isdir(os.path.join(outdir, x))]
+        prev_run_ids = [re.match(r'^\d+', x) for x in prev_run_dirs]
+        prev_run_ids = [int(x.group()) for x in prev_run_ids if x is not None]
+        cur_run_id = max(prev_run_ids, default=-1) + 1
+        c.run_dir = os.path.join(outdir, f'{cur_run_id:05d}-{desc}')
+    else:
+        c.run_dir = outdir
+        
+        #assert not os.path.exists(c.run_dir)
 
     # Print options.
     print()
@@ -81,9 +90,11 @@ def launch_training(c, desc, outdir, dry_run):
 
     # Create output directory.
     print('Creating output directory...')
-    os.makedirs(c.run_dir)
-    with open(os.path.join(c.run_dir, 'training_options.json'), 'wt') as f:
+    #os.makedirs(c.run_dir)
+    with fsspec.open(os.path.join(c.run_dir, 'training_options.json'), 'wt', auto_mkdir=True) as f:
         json.dump(c, f, indent=2)
+
+    c.pop('no_subdir') # removes no_subdir
 
     # Launch processes.
     print('Launching processes...')
@@ -149,6 +160,9 @@ def parse_comma_separated_list(s):
 @click.option('--workers',      help='DataLoader worker processes', metavar='INT',              type=click.IntRange(min=1), default=3, show_default=True)
 @click.option('-n','--dry-run', help='Print training options and exit',                         is_flag=True)
 
+@click.option('--no-subdir', is_flag=True, help='Do not create subdirectories')
+
+
 def main(**kwargs):
     # Initialize config.
     opts = dnnlib.EasyDict(kwargs) # Command line arguments.
@@ -169,7 +183,8 @@ def main(**kwargs):
         raise click.ClickException('--cond=True requires labels specified in dataset.json')
     c.training_set_kwargs.use_labels = opts.cond
     c.training_set_kwargs.xflip = opts.mirror
-
+    c.no_subdir = opts.no_subdir
+    # s3://mosaicml-internal-checkpoints-shared/aaron/learned-diffusion/v0/vdm/
     # Hyperparameters & settings.
     c.num_gpus = opts.gpus
     c.batch_size = opts.batch
@@ -186,7 +201,7 @@ def main(**kwargs):
         
         ema_nimg = 500 * 1000
         
-    if opts.preset == 'cifar':
+    elif opts.preset == 'cifar':
         WidthPerStage = [3 * x // 4 for x in [1024, 1024, 1024, 1024]]
         BlocksPerStage = [2 * x for x in [1, 1, 1, 1]]
         CardinalityPerStage = [3 * x for x in [32, 32, 32, 32]]
@@ -205,6 +220,24 @@ def main(**kwargs):
         c.gamma_scheduler = { 'base_value': 0.1, 'final_value': 0.01, 'total_nimg': decay_nimg }
         c.beta_scheduler = { 'base_value': 0.9, 'final_value': 0.999, 'total_nimg': decay_nimg }
     
+    elif opts.preset == 'imagenet':
+        WidthPerStage = [6 * x // 4 for x in [1024, 1024, 1024, 1024, 512]]
+        BlocksPerStage = [2 * x for x in [1, 1, 1, 1, 1]]
+        CardinalityPerStage = [3 * x for x in [32, 32, 32, 32, 16]]
+        FP16Stages = [-1, -2, -3, -4]
+        NoiseDimension = 64
+        
+        c.G_kwargs.ConditionEmbeddingDimension = NoiseDimension
+        c.D_kwargs.ConditionEmbeddingDimension = WidthPerStage[0]
+        
+        ema_nimg = 50000 * 1000
+        decay_nimg = 2e8
+        
+        c.ema_scheduler = { 'base_value': 0, 'final_value': ema_nimg, 'total_nimg': decay_nimg }
+        c.ada_scheduler = { 'base_value': 1.01, 'final_value': 0.35, 'total_nimg': decay_nimg }
+        c.lr_scheduler = { 'base_value': 2e-4, 'final_value': 5e-5, 'total_nimg': decay_nimg }
+        c.gamma_scheduler = { 'base_value': 1, 'final_value': 0.1, 'total_nimg': decay_nimg }
+        c.beta_scheduler = { 'base_value': 0.9, 'final_value': 0.999, 'total_nimg': decay_nimg }
     
     c.G_kwargs.NoiseDimension = NoiseDimension
     c.G_kwargs.WidthPerStage = WidthPerStage
