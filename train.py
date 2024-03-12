@@ -31,13 +31,13 @@ def subprocess_fn(rank, c, temp_dir):
     if c.num_gpus > 1:
         init_file = os.path.abspath(os.path.join(temp_dir, '.torch_distributed_init'))
         if os.name == 'nt':
-            #init_method = 'file:///' + init_file.replace('\\', '/')
+            init_method = 'file:///' + init_file.replace('\\', '/')
             torch.distributed.init_process_group(backend='gloo', #init_method=init_method, 
                 rank=rank, world_size=c.num_gpus)
         else:
-            #init_method = f'file://{init_file}'
+            init_method = f'file://{init_file}'
             torch.distributed.init_process_group(backend='nccl', 
-            #init_method=init_method, 
+                init_method=init_method, 
                 rank=rank, world_size=c.num_gpus)
 
     # Init torch_utils.
