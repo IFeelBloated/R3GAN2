@@ -240,7 +240,7 @@ def main(**kwargs):
         c.beta_scheduler = { 'base_value': 0.9, 'final_value': 0.999, 'total_nimg': decay_nimg }
     
     elif opts.preset == 'imagenet32':
-        WidthPerStage = [6 * x // 4 for x in [1024, 1024, 1024, 1024]]
+        WidthPerStage = [3 * x // 4 for x in [1024, 1024, 1024, 1024]]
         BlocksPerStage = [2 * x for x in [1, 1, 1, 1]]
         CardinalityPerStage = [3 * x for x in [32, 32, 32, 32]]
         FP16Stages = [-1, -2, -3]
