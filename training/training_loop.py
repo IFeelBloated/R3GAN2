@@ -265,7 +265,7 @@ def training_loop(
     stats_jsonl = None
     stats_tfevents = None
     if rank == 0:
-        stats_jsonl = fsspec.open(os.path.join(run_dir, 'stats.jsonl'), 'wt')
+        stats_jsonl = fsspec.open(os.path.join(run_dir, 'stats.jsonl'), 'wt').open()
         #stats_jsonl = None # TODO fix.
         try:
             import torch.utils.tensorboard as tensorboard
@@ -461,15 +461,15 @@ def training_loop(
         timestamp = time.time()
         if stats_jsonl is not None:
             fields = dict(stats_dict, timestamp=timestamp)
-            with stats_jsonl as f:
-                f.write(json.dumps(fields) + '\n')
-                try:
-                    f.flush()
-                except AttributeError:
-                    pass # workaround for S3FS bug
+            # with stats_jsonl as f:
+            #     f.write(json.dumps(fields) + '\n')
+            #     try:
+            #         f.flush()
+            #     except AttributeError:
+            #         pass # workaround for S3FS bug
                 #f.flush()
-            #stats_jsonl.write(json.dumps(fields) + '\n')
-            #stats_jsonl.flush()
+            stats_jsonl.write(json.dumps(fields) + '\n')
+            stats_jsonl.flush()
         if stats_tfevents is not None:
             global_step = int(cur_nimg / 1e3)
             walltime = timestamp - start_time
@@ -494,6 +494,7 @@ def training_loop(
 
     # Done.
     if rank == 0:
+        stats_jsonl.close()
         print()
         print('Exiting...')
 
