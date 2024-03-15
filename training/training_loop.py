@@ -480,7 +480,7 @@ def training_loop(
             try:
                 stats_tfevents.flush()
             except AttributeError:
-                passl
+                pass
         if progress_fn is not None:
             progress_fn(cur_nimg // 1000, total_kimg)
 
