@@ -31,6 +31,10 @@ def subprocess_fn(rank, c, temp_dir):
     local_rank=rank
     num_nodes = int(os.environ.get('NUM_NODES', '1'))
     node_rank = int(os.environ.get('NODE_RANK', '1'))
+    if num_nodes > 1 and  "MASTER_ADDR" not in os.environ:
+        raise AssertionError("MASTER_ADDR must be specified")
+    if num_nodes > 1 and  "MASTER_PORT" not in os.environ:
+        raise AssertionError("MASTER_PORT must be specified")
     local_world_size = int(os.environ.get('LOCAL_WORLD_SIZE', '1'))
     os.environ.setdefault("MASTER_ADDR", "127.0.0.1")
     os.environ.setdefault("MASTER_PORT", "8888")
