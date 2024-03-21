@@ -142,7 +142,7 @@ def training_loop(
     ada_scheduler           = None,
     ada_kimg                = 500,      # ADA adjustment speed, measured in how many kimg it takes for p to increase/decrease by one unit.
     total_kimg              = 25000,    # Total length of the training, measured in thousands of real images.
-    kimg_per_tick           = 4,        # Progress snapshot interval.
+    kimg_per_tick           = 40,        # Progress snapshot interval.
     image_snapshot_ticks    = 50,       # How often to save image snapshots? None = disable.
     network_snapshot_ticks  = 50,       # How often to save network snapshots? None = disable.
     resume_pkl              = None,     # Network pickle to resume training from.
@@ -439,6 +439,10 @@ def training_loop(
             if rank == 0:
                 with fsspec.open(snapshot_pkl, 'wb') as f:
                     pickle.dump(snapshot_data, f)
+                if stats_jsonl is not None:
+                    stats_jsonl.flush()
+                if stats_tfevents is not None:
+                    stats_tfevents.flush()
 
         # Evaluate metrics.
         if (snapshot_data is not None) and (len(metrics) > 0):
@@ -474,7 +478,7 @@ def training_loop(
             #         pass # workaround for S3FS bug
                 #f.flush()
             stats_jsonl.write(json.dumps(fields) + '\n')
-            stats_jsonl.flush()
+            #stats_jsonl.flush()
         if stats_tfevents is not None:
             global_step = int(cur_nimg / 1e3)
             walltime = timestamp - start_time
@@ -482,10 +486,10 @@ def training_loop(
                 stats_tfevents.add_scalar(name, value.mean, global_step=global_step, walltime=walltime)
             for name, value in stats_metrics.items():
                 stats_tfevents.add_scalar(f'Metrics/{name}', value, global_step=global_step, walltime=walltime)
-            try:
-                stats_tfevents.flush()
-            except AttributeError:
-                pass
+            #try:
+            #    stats_tfevents.flush()
+            #except AttributeError:
+            #    pass
         if progress_fn is not None:
             progress_fn(cur_nimg // 1000, total_kimg)
 
