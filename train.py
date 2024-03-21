@@ -28,22 +28,29 @@ def subprocess_fn(rank, c, temp_dir):
     # dnnlib.util.Logger(file_name=os.path.join(c.run_dir, 'log.txt'), file_mode='a', should_flush=True)
 
     # Init torch.distributed.
+    local_rank=rank
+    num_nodes = int(os.environ.get('NUM_NODES', '1'))
+    node_rank = int(os.environ.get('NODE_RANK', '1'))
+    local_world_size = int(os.environ.get('LOCAL_WORLD_SIZE', '1'))
+    os.environ.setdefault("MASTER_ADDR", "127.0.0.1")
+    os.environ.setdefault("MASTER_PORT", "8888")
+    global_rank = rank + (node_rank * local_world_size)
     if c.num_gpus > 1:
         init_file = os.path.abspath(os.path.join(temp_dir, '.torch_distributed_init'))
         if os.name == 'nt':
             init_method = 'file:///' + init_file.replace('\\', '/')
-            torch.distributed.init_process_group(backend='gloo', #init_method=init_method, 
-                rank=rank, world_size=c.num_gpus)
+            torch.distributed.init_process_group(backend='gloo', init_method=init_method, 
+                rank=global_rank, world_size=c.num_gpus)
         else:
-            init_method = f'file://{init_file}'
+            #init_method = f'file://{init_file}'
             torch.distributed.init_process_group(backend='nccl', 
-                init_method=init_method, 
-                rank=rank, world_size=c.num_gpus)
+                #init_method=init_method, 
+                rank=global_rank, world_size=c.num_gpus)
 
     # Init torch_utils.
     sync_device = torch.device('cuda', rank) if c.num_gpus > 1 else None
-    training_stats.init_multiprocessing(rank=rank, sync_device=sync_device)
-    if rank != 0:
+    training_stats.init_multiprocessing(rank=torch.distributed.get_rank(), sync_device=sync_device)
+    if torch.distributed.get_rank() != 0:
         custom_ops.verbosity = 'none'
 
     # Execute training loop.
@@ -137,11 +144,13 @@ def launch_training(c, desc, outdir, dry_run):
     # Launch processes.
     print('Launching processes...')
     torch.multiprocessing.set_start_method('spawn')
+    num_nodes = int(os.environ.get('NUM_NODES', 1))
+    local_world_size = int(os.environ.get('LOCAL_WORLD_SIZE', '1'))
     with tempfile.TemporaryDirectory() as temp_dir:
         if c.num_gpus == 1:
             subprocess_fn(rank=0, c=c, temp_dir=temp_dir)
         else:
-            torch.multiprocessing.spawn(fn=subprocess_fn, args=(c, temp_dir), nprocs=c.num_gpus)
+            torch.multiprocessing.spawn(fn=subprocess_fn, args=(c, temp_dir), nprocs=local_world_size)
 
 #----------------------------------------------------------------------------
 

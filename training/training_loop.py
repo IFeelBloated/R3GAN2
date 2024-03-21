@@ -152,7 +152,11 @@ def training_loop(
 ):
     # Initialize.
     start_time = time.time()
-    device = torch.device('cuda', rank)
+    rank = torch.distributed.get_rank()
+    local_world_size = int(os.environ.get("LOCAL_WORLD_SIZE", "1"))
+    world_size = torch.distributed.get_world_size()
+    device = torch.device('cuda', rank % local_world_size)
+    assert num_gpus == world_size
     np.random.seed(random_seed * num_gpus + rank)
     torch.manual_seed(random_seed * num_gpus + rank)
     torch.backends.cudnn.benchmark = cudnn_benchmark    # Improves training speed.
