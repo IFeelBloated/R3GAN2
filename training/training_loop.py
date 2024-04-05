@@ -269,8 +269,7 @@ def training_loop(
     stats_jsonl = None
     stats_tfevents = None
     if rank == 0:
-        # TODO (Binary append mode is support apparently)
-        stats_jsonl = fsspec.open(os.path.join(run_dir, 'stats.jsonl'), 'ab').open()
+        stats_jsonl = fsspec.open(os.path.join(run_dir, 'stats.jsonl'), 'wt').open()
         #stats_jsonl = None # TODO fix.
         try:
             import tensorflow_io
@@ -440,10 +439,10 @@ def training_loop(
             if rank == 0:
                 with fsspec.open(snapshot_pkl, 'wb') as f:
                     pickle.dump(snapshot_data, f)
-                # if stats_jsonl is not None:
-                #     stats_jsonl.flush()
-                # if stats_tfevents is not None:
-                #     stats_tfevents.flush()
+                if stats_jsonl is not None:
+                    stats_jsonl.flush()
+                if stats_tfevents is not None:
+                    stats_tfevents.flush()
 
         # Evaluate metrics.
         if (snapshot_data is not None) and (len(metrics) > 0):
@@ -471,14 +470,14 @@ def training_loop(
         timestamp = time.time()
         if stats_jsonl is not None:
             fields = dict(stats_dict, timestamp=timestamp)
-            with stats_jsonl as f:
-                f.write((json.dumps(fields) + '\n').encode("utf-8"))
-                # try:
-                #     f.flush()
-                # except AttributeError:
-                #     pass # workaround for S3FS bug
-                f.flush()
-            #stats_jsonl.write(json.dumps(fields) + '\n')
+            # with stats_jsonl as f:
+            #     f.write(json.dumps(fields) + '\n')
+            #     try:
+            #         f.flush()
+            #     except AttributeError:
+            #         pass # workaround for S3FS bug
+                #f.flush()
+            stats_jsonl.write(json.dumps(fields) + '\n')
             #stats_jsonl.flush()
         if stats_tfevents is not None:
             global_step = int(cur_nimg / 1e3)
@@ -488,7 +487,7 @@ def training_loop(
             for name, value in stats_metrics.items():
                 stats_tfevents.add_scalar(f'Metrics/{name}', value, global_step=global_step, walltime=walltime)
             #try:
-            stats_tfevents.flush()
+            #    stats_tfevents.flush()
             #except AttributeError:
             #    pass
         if progress_fn is not None:
@@ -504,7 +503,7 @@ def training_loop(
 
     # Done.
     if rank == 0:
-        #stats_jsonl.close()
+        stats_jsonl.close()
         print()
         print('Exiting...')
 
