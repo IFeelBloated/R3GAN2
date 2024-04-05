@@ -35,7 +35,7 @@ def subprocess_fn(rank, c, temp_dir):
         raise AssertionError("MASTER_ADDR must be specified")
     if num_nodes > 1 and  "MASTER_PORT" not in os.environ:
         raise AssertionError("MASTER_PORT must be specified")
-    local_world_size = int(os.environ.get('LOCAL_WORLD_SIZE', '1'))
+    local_world_size = int(os.environ.get('LOCAL_WORLD_SIZE', torch.cuda.device_count()))
     os.environ.setdefault("MASTER_ADDR", "127.0.0.1")
     os.environ.setdefault("MASTER_PORT", "8888")
     global_rank = rank + (node_rank * local_world_size)
@@ -253,7 +253,7 @@ def main(**kwargs):
         ema_nimg = 500 * 1000
 
         if gammas is not None:
-            raise NotImplementedError
+            raise NotImplementedErromc
         
     elif opts.preset == 'cifar':
         WidthPerStage = [3 * x // 4 for x in [1024, 1024, 1024, 1024]]
