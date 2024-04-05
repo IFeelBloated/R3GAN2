@@ -39,7 +39,7 @@ def subprocess_fn(rank, c, temp_dir):
     os.environ.setdefault("MASTER_ADDR", "127.0.0.1")
     os.environ.setdefault("MASTER_PORT", "8888")
     global_rank = rank + (node_rank * local_world_size)
-    if c.num_gpus > 1:
+    if True:#c.num_gpus > 1:
         init_file = os.path.abspath(os.path.join(temp_dir, '.torch_distributed_init'))
         if os.name == 'nt':
             init_method = 'file:///' + init_file.replace('\\', '/')
@@ -212,7 +212,7 @@ def parse_comma_separated_list(s):
 @click.option('-n','--dry-run', help='Print training options and exit',                         is_flag=True)
 
 @click.option('--no-subdir', is_flag=True, help='Do not create subdirectories')
-
+@click.option('--gammas', type=(float, float), default=None, help='Two float values separated by a space.')
 
 def main(**kwargs):
     # Initialize config.
@@ -251,6 +251,9 @@ def main(**kwargs):
         NoiseDimension = 64
         
         ema_nimg = 500 * 1000
+
+        if gammas is not None:
+            raise NotImplementedError
         
     elif opts.preset == 'cifar':
         WidthPerStage = [3 * x // 4 for x in [1024, 1024, 1024, 1024]]
@@ -264,11 +267,15 @@ def main(**kwargs):
         
         ema_nimg = 5000 * 1000
         decay_nimg = 2e7
+
+        gammas = c.pop("gammas", None)
+        if gammas is None:
+            gammas = (1, 0.01)
         
         c.ema_scheduler = { 'base_value': 0, 'final_value': ema_nimg, 'total_nimg': decay_nimg }
         c.ada_scheduler = { 'base_value': 1.01, 'final_value': 0.35, 'total_nimg': decay_nimg }
         c.lr_scheduler = { 'base_value': 2e-4, 'final_value': 5e-5, 'total_nimg': decay_nimg }
-        c.gamma_scheduler = { 'base_value': 0.1, 'final_value': 0.01, 'total_nimg': decay_nimg }
+        c.gamma_scheduler = { 'base_value': gammas[0], 'final_value': gammas[1], 'total_nimg': decay_nimg }
         c.beta_scheduler = { 'base_value': 0.9, 'final_value': 0.999, 'total_nimg': decay_nimg }
     
     elif opts.preset == 'imagenet':
@@ -284,10 +291,14 @@ def main(**kwargs):
         ema_nimg = 50000 * 1000
         decay_nimg = 2e8
         
+        gammas = c.pop("gammas", None)
+        if gammas is None:
+            gammas = (1, 0.1)
+
         c.ema_scheduler = { 'base_value': 0, 'final_value': ema_nimg, 'total_nimg': decay_nimg }
         c.ada_scheduler = { 'base_value': 1.01, 'final_value': 0.35, 'total_nimg': decay_nimg }
         c.lr_scheduler = { 'base_value': 2e-4, 'final_value': 5e-5, 'total_nimg': decay_nimg }
-        c.gamma_scheduler = { 'base_value': 1, 'final_value': 0.1, 'total_nimg': decay_nimg }
+        c.gamma_scheduler = { 'base_value': gammas[0], 'final_value': gammas[1], 'total_nimg': decay_nimg }
         c.beta_scheduler = { 'base_value': 0.9, 'final_value': 0.999, 'total_nimg': decay_nimg }
     
     elif opts.preset == 'imagenet32':
@@ -303,12 +314,16 @@ def main(**kwargs):
         ema_nimg = 50000 * 1000
         decay_nimg = 2e8
         
+        gammas = c.pop("gammas", None)
+        if gammas is None:
+            gammas = (0.5, 0.05)
+
         c.ema_scheduler = { 'base_value': 0, 'final_value': ema_nimg, 'total_nimg': decay_nimg }
         c.ada_scheduler = { 'base_value': 1.01, 'final_value': 0.35, 'total_nimg': decay_nimg }
         c.lr_scheduler = { 'base_value': 2e-4, 'final_value': 5e-5, 'total_nimg': decay_nimg }
-        c.gamma_scheduler = { 'base_value': 0.5, 'final_value': 0.05, 'total_nimg': decay_nimg }
+        c.gamma_scheduler = { 'base_value': gammas[0], 'final_value': gammas[1], 'total_nimg': decay_nimg }
         c.beta_scheduler = { 'base_value': 0.9, 'final_value': 0.999, 'total_nimg': decay_nimg }
-    
+
     c.G_kwargs.NoiseDimension = NoiseDimension
     c.G_kwargs.WidthPerStage = WidthPerStage
     c.G_kwargs.CardinalityPerStage = CardinalityPerStage
