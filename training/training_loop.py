@@ -406,7 +406,7 @@ def training_loop(
         training_stats.report0('Timing/total_hours', (tick_end_time - start_time) / (60 * 60))
         training_stats.report0('Timing/total_days', (tick_end_time - start_time) / (24 * 60 * 60))
         if rank == 0:
-            print(' '.join(fields))
+            print(' '.join(fields), flush=True)
 
         # Check for abort.
         if (not done) and (abort_fn is not None) and abort_fn():
