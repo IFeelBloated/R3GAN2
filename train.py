@@ -242,7 +242,9 @@ def main(**kwargs):
     c.g_batch_gpu = opts.g_batch_gpu or opts.batch // opts.gpus
     c.d_batch_gpu = opts.d_batch_gpu or opts.batch // opts.gpus
     
-    
+    gammas = opts.pop("gammas", None)
+    print(f"{gammas=}")
+
     if opts.preset == 'FFHQ256':
         WidthPerStage = [3 * x // 4 for x in [1024, 1024, 1024, 1024, 512, 256, 128]]
         BlocksPerStage = [2 * x for x in [1, 1, 1, 1, 1, 1, 1]]
@@ -268,7 +270,6 @@ def main(**kwargs):
         ema_nimg = 5000 * 1000
         decay_nimg = 2e7
 
-        gammas = c.pop("gammas", None)
         if gammas is None:
             gammas = (1, 0.01)
         
@@ -291,7 +292,6 @@ def main(**kwargs):
         ema_nimg = 50000 * 1000
         decay_nimg = 2e8
         
-        gammas = c.pop("gammas", None)
         if gammas is None:
             gammas = (1, 0.1)
 
@@ -314,7 +314,6 @@ def main(**kwargs):
         ema_nimg = 50000 * 1000
         decay_nimg = 2e8
         
-        gammas = c.pop("gammas", None)
         if gammas is None:
             gammas = (0.5, 0.05)
 
