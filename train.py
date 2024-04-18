@@ -196,7 +196,6 @@ def parse_comma_separated_list(s):
 @click.option('--resume',       help='Resume from given network pickle', metavar='[PATH|URL]',  type=str)
 
 # Misc hyperparameters.
-@click.option('--p',            help='Probability for --aug=fixed', metavar='FLOAT',            type=click.FloatRange(min=0, max=1), default=0.2, show_default=True)
 @click.option('--g-batch-gpu',  help='Limit batch size per GPU for G', metavar='INT',           type=click.IntRange(min=1))
 @click.option('--d-batch-gpu',  help='Limit batch size per GPU for D', metavar='INT',           type=click.IntRange(min=1))
 
@@ -271,13 +270,13 @@ def main(**kwargs):
         decay_nimg = 2e7
 
         if gammas is None:
-            gammas = (1, 0.01)
+            gammas = (0.1, 0.01)
         
         c.ema_scheduler = { 'base_value': 0, 'final_value': ema_nimg, 'total_nimg': decay_nimg }
-        c.ada_scheduler = { 'base_value': 1.01, 'final_value': 0.35, 'total_nimg': decay_nimg }
+        c.aug_scheduler = { 'base_value': 0, 'final_value': 0.5, 'total_nimg': decay_nimg }
         c.lr_scheduler = { 'base_value': 2e-4, 'final_value': 5e-5, 'total_nimg': decay_nimg }
         c.gamma_scheduler = { 'base_value': gammas[0], 'final_value': gammas[1], 'total_nimg': decay_nimg }
-        c.beta_scheduler = { 'base_value': 0.9, 'final_value': 0.999, 'total_nimg': decay_nimg }
+        c.beta2_scheduler = { 'base_value': 0.9, 'final_value': 0.999, 'total_nimg': decay_nimg }
     
     elif opts.preset == 'imagenet':
         WidthPerStage = [6 * x // 4 for x in [1024, 1024, 1024, 1024, 512]]
@@ -296,10 +295,10 @@ def main(**kwargs):
             gammas = (1, 0.1)
 
         c.ema_scheduler = { 'base_value': 0, 'final_value': ema_nimg, 'total_nimg': decay_nimg }
-        c.ada_scheduler = { 'base_value': 1.01, 'final_value': 0.35, 'total_nimg': decay_nimg }
+        c.aug_scheduler = { 'base_value': 0, 'final_value': 0.5, 'total_nimg': decay_nimg }
         c.lr_scheduler = { 'base_value': 2e-4, 'final_value': 5e-5, 'total_nimg': decay_nimg }
         c.gamma_scheduler = { 'base_value': gammas[0], 'final_value': gammas[1], 'total_nimg': decay_nimg }
-        c.beta_scheduler = { 'base_value': 0.9, 'final_value': 0.999, 'total_nimg': decay_nimg }
+        c.beta2_scheduler = { 'base_value': 0.9, 'final_value': 0.999, 'total_nimg': decay_nimg }
     
     elif opts.preset == 'imagenet32':
         WidthPerStage = [6 * x // 4 for x in [1024, 1024, 1024, 1024]]
@@ -318,10 +317,10 @@ def main(**kwargs):
             gammas = (0.5, 0.05)
 
         c.ema_scheduler = { 'base_value': 0, 'final_value': ema_nimg, 'total_nimg': decay_nimg }
-        c.ada_scheduler = { 'base_value': 1.01, 'final_value': 0.35, 'total_nimg': decay_nimg }
+        c.aug_scheduler = { 'base_value': 0, 'final_value': 0.5, 'total_nimg': decay_nimg }
         c.lr_scheduler = { 'base_value': 2e-4, 'final_value': 5e-5, 'total_nimg': decay_nimg }
         c.gamma_scheduler = { 'base_value': gammas[0], 'final_value': gammas[1], 'total_nimg': decay_nimg }
-        c.beta_scheduler = { 'base_value': 0.9, 'final_value': 0.999, 'total_nimg': decay_nimg }
+        c.beta2_scheduler = { 'base_value': 0.9, 'final_value': 0.999, 'total_nimg': decay_nimg }
 
     c.G_kwargs.NoiseDimension = NoiseDimension
     c.G_kwargs.WidthPerStage = WidthPerStage
@@ -356,8 +355,6 @@ def main(**kwargs):
     # Augmentation.
     if opts.aug != 'noaug':
         c.augment_kwargs = dnnlib.EasyDict(class_name='training.augment.AugmentPipe', xflip=1, rotate90=1, xint=1, scale=1, rotate=1, aniso=1, xfrac=1, brightness=0.5, contrast=0.5, lumaflip=0.5, hue=0.5, saturation=0.5, cutout=1)
-        if opts.aug == 'fixed':
-            c.augment_p = opts.p
 
     # Resume.
     if opts.resume is not None:
