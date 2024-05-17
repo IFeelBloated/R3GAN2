@@ -213,7 +213,7 @@ def parse_comma_separated_list(s):
 @click.option('--no-subdir', is_flag=True, help='Do not create subdirectories')
 @click.option('--gammas', type=(float, float), default=None, help='Two float values separated by a space.')
 @click.option('--lrs', type=(float, float), default=None, help='Two float values separated by a space.')
-
+@click.option('--beta2', type=(float, float), default=None, help='Two float values separated by a space.')
 
 def main(**kwargs):
     # Initialize config.
@@ -249,6 +249,10 @@ def main(**kwargs):
     if lrs is None:
         lrs = (2e-4, 5e-5)
     print(f"{lrs=}")
+    beta2 = opts.pop("beta2", None)
+    if beta2 is None:
+        beta2 = (0.9, 0.999)
+    print(f"{beta2=}")
 
     if opts.preset == 'FFHQ256':
         WidthPerStage = [3 * x // 4 for x in [1024, 1024, 1024, 1024, 512, 256, 128]]
@@ -282,7 +286,7 @@ def main(**kwargs):
         c.aug_scheduler = { 'base_value': 0, 'final_value': 0.5, 'total_nimg': decay_nimg }
         c.lr_scheduler = { 'base_value': lrs[0], 'final_value': lrs[1], 'total_nimg': decay_nimg }
         c.gamma_scheduler = { 'base_value': gammas[0], 'final_value': gammas[1], 'total_nimg': decay_nimg }
-        c.beta2_scheduler = { 'base_value': 0.9, 'final_value': 0.999, 'total_nimg': decay_nimg }
+        c.beta2_scheduler = { 'base_value': beta2[0], 'final_value': beta2[1], 'total_nimg': decay_nimg }
     
     elif opts.preset == 'imagenet':
         WidthPerStage = [6 * x // 4 for x in [1024, 1024, 1024, 1024, 512]]
@@ -304,7 +308,7 @@ def main(**kwargs):
         c.aug_scheduler = { 'base_value': 0, 'final_value': 0.5, 'total_nimg': decay_nimg }
         c.lr_scheduler = { 'base_value': lrs[0], 'final_value': lrs[1], 'total_nimg': decay_nimg }
         c.gamma_scheduler = { 'base_value': gammas[0], 'final_value': gammas[1], 'total_nimg': decay_nimg }
-        c.beta2_scheduler = { 'base_value': 0.9, 'final_value': 0.999, 'total_nimg': decay_nimg }
+        c.beta2_scheduler = { 'base_value': beta2[0], 'final_value': beta2[1], 'total_nimg': decay_nimg }
     
     elif opts.preset == 'imagenet32':
         WidthPerStage = [6 * x // 4 for x in [1024, 1024, 1024, 1024]]
@@ -326,7 +330,7 @@ def main(**kwargs):
         c.aug_scheduler = { 'base_value': 0, 'final_value': 0.5, 'total_nimg': decay_nimg }
         c.lr_scheduler = { 'base_value': lrs[0], 'final_value': lrs[1], 'total_nimg': decay_nimg }
         c.gamma_scheduler = { 'base_value': gammas[0], 'final_value': gammas[1], 'total_nimg': decay_nimg }
-        c.beta2_scheduler = { 'base_value': 0.9, 'final_value': 0.999, 'total_nimg': decay_nimg }
+        c.beta2_scheduler = { 'base_value': beta2[0], 'final_value': beta2[1], 'total_nimg': decay_nimg }
 
     c.G_kwargs.NoiseDimension = NoiseDimension
     c.G_kwargs.WidthPerStage = WidthPerStage
