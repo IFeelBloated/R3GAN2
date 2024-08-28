@@ -332,9 +332,9 @@ def main(**kwargs):
         c.gamma_scheduler = { 'base_value': gammas[0], 'final_value': gammas[1], 'total_nimg': decay_nimg }
         c.beta2_scheduler = { 'base_value': beta2[0], 'final_value': beta2[1], 'total_nimg': decay_nimg }
     elif opts.preset == 'imagenet128':
-        WidthPerStage = [6 * x // 4 for x in [2560, 2048, 1536, 1024, 512]]
-        BlocksPerStage = [2 * x for x in [1, 1, 1, 1, 1]]
-        CardinalityPerStage = [3 * x for x in [80, 64, 48, 32, 16]]
+        WidthPerStage = [6 * x // 4 for x in [2560, 2048, 1536, 1024, 512, 512]]
+        BlocksPerStage = [2 * x for x in [1, 1, 1, 1, 1, 1]]
+        CardinalityPerStage = [3 * x for x in [80, 64, 48, 32, 16, 16]]
         FP16Stages = [-1, -2, -3]
         NoiseDimension = 64
         
