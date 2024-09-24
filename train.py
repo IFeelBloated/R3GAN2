@@ -394,6 +394,27 @@ def main(**kwargs):
         c.lr_scheduler = { 'base_value': 2e-4, 'final_value': 5e-5, 'total_nimg': decay_nimg }
         c.gamma_scheduler = { 'base_value': gammas[0], 'final_value': gammas[1], 'total_nimg': decay_nimg }
         c.beta2_scheduler = { 'base_value': 0.9, 'final_value': 0.99, 'total_nimg': decay_nimg }
+    elif opts.preset == 'imagenet64-sgxl-x1':
+        WidthPerStage = [6 * x // 4 for x in [1024, 1024, 1024, 1024, 1024]]
+        BlocksPerStage = [2 * x for x in [1, 1, 1, 1, 1]]
+        CardinalityPerStage = [3 * x for x in [32, 32, 32, 32, 32]]
+        FP16Stages = [-1, -2, -3, -4]
+        NoiseDimension = 64
+        
+        c.G_kwargs.ConditionEmbeddingDimension = NoiseDimension
+        c.D_kwargs.ConditionEmbeddingDimension = WidthPerStage[0]
+        
+        ema_nimg = 50000 * 1000
+        decay_nimg = 2e8
+        
+        if gammas is None:
+            gammas = (1, 0.1)
+
+        c.ema_scheduler = { 'base_value': 0, 'final_value': ema_nimg, 'total_nimg': decay_nimg }
+        c.aug_scheduler = { 'base_value': 0, 'final_value': 0.6, 'total_nimg': decay_nimg }
+        c.lr_scheduler = { 'base_value': 2e-4, 'final_value': 5e-5, 'total_nimg': decay_nimg }
+        c.gamma_scheduler = { 'base_value': gammas[0], 'final_value': gammas[1], 'total_nimg': decay_nimg }
+        c.beta2_scheduler = { 'base_value': 0.9, 'final_value': 0.99, 'total_nimg': decay_nimg }
     elif opts.preset == 'imagenet128-sgxl':
         WidthPerStage = [6 * x // 4 for x in [1024, 1024, 1024, 1024, 1024, 512]]
         BlocksPerStage = [2 * x for x in [1, 1, 1, 1, 1, 1]]
