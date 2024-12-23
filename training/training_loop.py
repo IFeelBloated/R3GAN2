@@ -341,6 +341,9 @@ def training_loop(
                     for param, grad in zip(params, grads):
                         param.grad = grad.reshape(param.shape)
                 phase.opt.step()
+                
+                # # Forced weight norm
+                # phase.module.Model.NormalizeWeight()
 
             # Phase done.
             if phase.end_event is not None:
