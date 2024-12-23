@@ -2,7 +2,7 @@ import math
 import torch
 import torch.nn as nn
 from .Resamplers import InterpolativeUpsampler, InterpolativeDownsampler
-from .MagnitudePreservingLayers import LeakyReLU, Convolution, Linear, SpatialExtentCreator, SpatialExtentRemover
+from .MagnitudePreservingLayers import LeakyReLU, Convolution, Linear, SpatialExtentCreator, SpatialExtentRemover, Normalize
 
 class ResidualBlock(nn.Module):
     def __init__(self, InputChannels, Cardinality, ExpansionFactor, KernelSize, VarianceScalingParameter):
@@ -115,6 +115,7 @@ class Generator(nn.Module):
         
         self.MainLayers = nn.ModuleList(MainLayers)
         self.AggregationLayer = Convolution(WidthPerStage[-1], 3, KernelSize=1)
+        self.Gain = torch.nn.Parameter(torch.ones([]))
         
         if ConditionDimension is not None:
             self.EmbeddingLayer = Linear(ConditionDimension, ConditionEmbeddingDimension)
@@ -125,7 +126,7 @@ class Generator(nn.Module):
         for Layer in self.MainLayers:
             x = Layer(x)
         
-        return self.AggregationLayer(x)
+        return self.AggregationLayer(Normalize(x), Gain=self.Gain)
     
     def NormalizeWeight(self):
         for x in self.modules():
@@ -142,13 +143,15 @@ class Discriminator(nn.Module):
         
         self.ExtractionLayer = Convolution(3, WidthPerStage[0], KernelSize=1)
         self.MainLayers = nn.ModuleList(MainLayers)
+        self.Bias = torch.nn.Parameter(0.5 + torch.zeros([]))
         
         if ConditionDimension is not None:
             self.EmbeddingLayer = Linear(ConditionDimension, ConditionEmbeddingDimension)
             self.EmbeddingGain = 1 / math.sqrt(ConditionEmbeddingDimension)
         
     def forward(self, x, y=None):
-        x = self.ExtractionLayer(x.to(self.MainLayers[0].DataType))
+        x = x.to(self.MainLayers[0].DataType)
+        x = Normalize(self.ExtractionLayer(x) + self.Bias.to(x.dtype).view(1, 1, 1, 1))
         
         for Layer in self.MainLayers:
             x = Layer(x)
