@@ -220,8 +220,8 @@ def main(**kwargs):
     opts = dnnlib.EasyDict(kwargs) # Command line arguments.
     c = dnnlib.EasyDict() # Main config dict.
     
-    c.G_kwargs = dnnlib.EasyDict(class_name='training.networks_baseline.Generator')
-    c.D_kwargs = dnnlib.EasyDict(class_name='training.networks_baseline.Discriminator')
+    c.G_kwargs = dnnlib.EasyDict(class_name='training.networks.Generator')
+    c.D_kwargs = dnnlib.EasyDict(class_name='training.networks.Discriminator')
     
     c.G_opt_kwargs = dnnlib.EasyDict(class_name='torch.optim.Adam', betas=[0,0], eps=1e-8)
     c.D_opt_kwargs = dnnlib.EasyDict(class_name='torch.optim.Adam', betas=[0,0], eps=1e-8)
