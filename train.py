@@ -261,6 +261,9 @@ def main(**kwargs):
         FP16Stages = [-1, -2, -3]
         NoiseDimension = 64
        
+        if gammas is None:
+            gammas = (0.05, 0.005)
+
         c.G_kwargs.ConditionEmbeddingDimension = NoiseDimension
         c.D_kwargs.ConditionEmbeddingDimension = WidthPerStage[0]
        
@@ -270,7 +273,7 @@ def main(**kwargs):
         c.ema_scheduler = { 'base_value': 0, 'final_value': ema_nimg, 'total_nimg': decay_nimg }
         c.aug_scheduler = { 'base_value': 0, 'final_value': 0.55, 'total_nimg': decay_nimg }
         c.lr_scheduler = { 'base_value': 1e-2, 'final_value': 2.5e-3, 'total_nimg': decay_nimg }
-        c.gamma_scheduler = { 'base_value': 0.05, 'final_value': 0.005, 'total_nimg': decay_nimg }
+        c.gamma_scheduler = { 'base_value': gammas[0], 'final_value': gammas[1], 'total_nimg': decay_nimg }
         c.beta2_scheduler = { 'base_value': 0.9, 'final_value': 0.99, 'total_nimg': decay_nimg }
 
     if opts.preset == 'FFHQ-64':
@@ -279,6 +282,8 @@ def main(**kwargs):
         CardinalityPerStage = [3 * x for x in [32, 32, 32, 32, 16]]
         FP16Stages = [-1, -2, -3, -4]
         NoiseDimension = 64
+
+        assert gammas is None
        
         ema_nimg = 500 * 1000
         decay_nimg = 2e7
@@ -296,6 +301,8 @@ def main(**kwargs):
         FP16Stages = [-1, -2, -3, -4]
         NoiseDimension = 64
        
+        assert gammas is None
+        
         ema_nimg = 500 * 1000
         decay_nimg = 2e7
        
@@ -311,7 +318,9 @@ def main(**kwargs):
         CardinalityPerStage = [3 * x for x in [32, 32, 32, 32]]
         FP16Stages = [-1, -2, -3]
         NoiseDimension = 64
-       
+
+        assert gammas is None
+
         c.G_kwargs.ConditionEmbeddingDimension = NoiseDimension
         c.D_kwargs.ConditionEmbeddingDimension = WidthPerStage[0]
        
@@ -330,6 +339,8 @@ def main(**kwargs):
         CardinalityPerStage = [3 * x for x in [32, 32, 32, 32, 32]]
         FP16Stages = [-1, -2, -3, -4]
         NoiseDimension = 64
+
+        assert gammas is None
         
         c.G_kwargs.ConditionEmbeddingDimension = NoiseDimension
         c.D_kwargs.ConditionEmbeddingDimension = WidthPerStage[0]
