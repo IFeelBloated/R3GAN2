@@ -56,5 +56,5 @@ class SpatialExtentRemover(nn.Module):
         
         self.Basis = WeightNormalizedConvolution(InputChannels, InputChannels, InputChannels, False, [4, 4])
         
-    def forward(self, x):
-        return self.Basis(x).view(x.shape[0], -1)
+    def forward(self, x, Gain):
+        return self.Basis(x, Gain=Gain).view(x.shape[0], -1)
