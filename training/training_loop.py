@@ -27,6 +27,15 @@ from torch_utils.ops import grid_sample_gradfix
 import legacy
 from metrics import metric_main
 
+import math
+def get_norm(x, Dimensions=None, ε=1e-4):
+    if Dimensions is None:
+        Dimensions = list(range(1, x.ndim))
+    Norm = torch.linalg.vector_norm(x, dim=Dimensions, keepdim=True, dtype=torch.float32)
+    Norm = torch.add(ε, Norm, alpha=math.sqrt(Norm.numel() / x.numel()))
+    return Norm
+
+
 def cosine_decay_with_warmup(cur_nimg, base_value, total_nimg, final_value=0.0, warmup_value=0.0, warmup_nimg=0, hold_base_value_nimg=0):
     decay = 0.5 * (1 + np.cos(np.pi * (cur_nimg - warmup_nimg - hold_base_value_nimg) / float(total_nimg - warmup_nimg - hold_base_value_nimg)))
     cur_value = base_value + (1 - decay) * (final_value - base_value)
@@ -175,11 +184,27 @@ def training_loop(
         print('Image shape:', training_set.image_shape)
         print('Label shape:', training_set.label_shape)
         print()
+        
+    # Training set stats
+    if rank == 0:
+        print('Calculating training set stats...')
+    dset = copy.deepcopy(training_set_kwargs)
+    dset.update(max_size=None, xflip=False)
+    dset = dnnlib.util.construct_class_by_name(**dset)
+    ldr = dict(pin_memory=True, num_workers=3, prefetch_factor=2)
+    
+    norm = torch.zeros([]).to(device).to(torch.float32)
+    for images, _labels in torch.utils.data.DataLoader(dataset=dset, batch_size=batch_size, **ldr):
+        img = images.to(device).to(torch.float32) / 127.5 - 1
+        norm += get_norm(img).view(img.shape[0]).sum([0])
+    norm = float(norm.cpu()) / len(dset)
+    if rank == 0:
+        print('Average norm:', norm)
 
     # Construct networks.
     if rank == 0:
         print('Constructing networks...')
-    common_kwargs = dict(c_dim=training_set.label_dim, img_resolution=training_set.resolution)
+    common_kwargs = dict(c_dim=training_set.label_dim, img_resolution=training_set.resolution, ExpectedMagnitude=norm)
     G = dnnlib.util.construct_class_by_name(**G_kwargs, **common_kwargs).train().requires_grad_(False).to(device) # subclass of torch.nn.Module
     D = dnnlib.util.construct_class_by_name(**D_kwargs, **common_kwargs).train().requires_grad_(False).to(device) # subclass of torch.nn.Module
     G_ema = copy.deepcopy(G).eval()

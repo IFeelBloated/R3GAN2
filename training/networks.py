@@ -21,7 +21,7 @@ class Generator(nn.Module):
         self.img_resolution = kw['img_resolution']
         
         for x in kw['FP16Stages']:
-            self.Model.MainLayers[x].DataType = torch.bfloat16
+            self.Model.DataTypePerStage[x] = torch.bfloat16
         
     def forward(self, x, c):
         return self.Model(x, c)
@@ -41,7 +41,7 @@ class Discriminator(nn.Module):
         self.Model = R3GAN.Networks.Discriminator(*args, **config)
         
         for x in kw['FP16Stages']:
-            self.Model.MainLayers[x].DataType = torch.bfloat16
+            self.Model.DataTypePerStage[x] = torch.bfloat16
         
     def forward(self, x, c):
         return self.Model(x, c)
