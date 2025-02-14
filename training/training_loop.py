@@ -185,26 +185,11 @@ def training_loop(
         print('Label shape:', training_set.label_shape)
         print()
         
-    # Training set stats
-    if rank == 0:
-        print('Calculating training set stats...')
-    dset = copy.deepcopy(training_set_kwargs)
-    dset.update(max_size=None, xflip=False)
-    dset = dnnlib.util.construct_class_by_name(**dset)
-    ldr = dict(pin_memory=True, num_workers=3, prefetch_factor=2)
-    
-    norm = torch.zeros([]).to(device).to(torch.float32)
-    for images, _labels in torch.utils.data.DataLoader(dataset=dset, batch_size=batch_size, **ldr):
-        img = images.to(device).to(torch.float32) / 127.5 - 1
-        norm += get_norm(img).view(img.shape[0]).sum([0])
-    norm = float(norm.cpu()) / len(dset)
-    if rank == 0:
-        print('Average norm:', norm)
 
     # Construct networks.
     if rank == 0:
         print('Constructing networks...')
-    common_kwargs = dict(c_dim=training_set.label_dim, img_resolution=training_set.resolution, ExpectedMagnitude=norm)
+    common_kwargs = dict(c_dim=training_set.label_dim, img_resolution=training_set.resolution)
     G = dnnlib.util.construct_class_by_name(**G_kwargs, **common_kwargs).train().requires_grad_(False).to(device) # subclass of torch.nn.Module
     D = dnnlib.util.construct_class_by_name(**D_kwargs, **common_kwargs).train().requires_grad_(False).to(device) # subclass of torch.nn.Module
     G_ema = copy.deepcopy(G).eval()
