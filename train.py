@@ -177,9 +177,7 @@ def main(**kwargs):
     
     if opts.preset == 'CIFAR10':
         WidthPerStage = [3 * x // 4 for x in [1024, 1024, 1024, 1024]]
-        BlocksPerStage = [2 * x for x in [1, 1, 1, 1]]
-        CardinalityPerStage = [3 * x for x in [32, 32, 32, 32]]
-        FP16Stages = [-1, -2, -3]
+        BlocksPerStage = [['FFN', 'FFN'], ['FFN', 'FFN'], ['FFN', 'FFN'], ['FFN', 'FFN']]
         NoiseDimension = 64
        
         c.G_kwargs.ConditionEmbeddingDimension = NoiseDimension
@@ -196,9 +194,7 @@ def main(**kwargs):
 
     if opts.preset == 'FFHQ-64':
         WidthPerStage = [3 * x // 4 for x in [1024, 1024, 1024, 1024, 512]]
-        BlocksPerStage = [2 * x for x in [1, 1, 1, 1, 1]]
-        CardinalityPerStage = [3 * x for x in [32, 32, 32, 32, 16]]
-        FP16Stages = [-1, -2, -3, -4]
+        BlocksPerStage = [['FFN', 'FFN'], ['FFN', 'FFN'], ['FFN', 'FFN'], ['FFN', 'FFN'], ['FFN', 'FFN']]
         NoiseDimension = 64
        
         ema_nimg = 500 * 1000
@@ -212,9 +208,7 @@ def main(**kwargs):
 
     if opts.preset == 'FFHQ-256':
         WidthPerStage = [3 * x // 4 for x in [1024, 1024, 1024, 1024, 512, 256, 128]]
-        BlocksPerStage = [2 * x for x in [1, 1, 1, 1, 1, 1, 1]]
-        CardinalityPerStage = [3 * x for x in [32, 32, 32, 32, 16, 8, 4]]
-        FP16Stages = [-1, -2, -3, -4]
+        BlocksPerStage = [['FFN', 'FFN'], ['FFN', 'FFN'], ['FFN', 'FFN'], ['FFN', 'FFN'], ['FFN', 'FFN'], ['FFN', 'FFN'], ['FFN', 'FFN']]
         NoiseDimension = 64
        
         ema_nimg = 500 * 1000
@@ -228,9 +222,7 @@ def main(**kwargs):
 
     if opts.preset == 'ImageNet-32':
         WidthPerStage = [6 * x // 4 for x in [1024, 1024, 1024, 1024]]
-        BlocksPerStage = [2 * x for x in [1, 1, 1, 1]]
-        CardinalityPerStage = [3 * x for x in [32, 32, 32, 32]]
-        FP16Stages = [-1, -2, -3]
+        BlocksPerStage = [['FFN', 'FFN'], ['FFN', 'FFN'], ['FFN', 'FFN'], ['FFN', 'FFN']]
         NoiseDimension = 64
        
         c.G_kwargs.ConditionEmbeddingDimension = NoiseDimension
@@ -247,9 +239,7 @@ def main(**kwargs):
 
     if opts.preset == 'ImageNet-64':
         WidthPerStage = [6 * x // 4 for x in [1024, 1024, 1024, 1024, 1024]]
-        BlocksPerStage = [2 * x for x in [1, 1, 1, 1, 1]]
-        CardinalityPerStage = [3 * x for x in [32, 32, 32, 32, 32]]
-        FP16Stages = [-1, -2, -3, -4]
+        BlocksPerStage = [['FFN', 'FFN'], ['FFN', 'FFN'], ['FFN', 'FFN'], ['FFN', 'FFN'], ['FFN', 'FFN']]
         NoiseDimension = 64
         
         c.G_kwargs.ConditionEmbeddingDimension = NoiseDimension
@@ -266,16 +256,18 @@ def main(**kwargs):
 
     c.G_kwargs.NoiseDimension = NoiseDimension
     c.G_kwargs.WidthPerStage = WidthPerStage
-    c.G_kwargs.CardinalityPerStage = CardinalityPerStage
     c.G_kwargs.BlocksPerStage = BlocksPerStage
-    c.G_kwargs.ExpansionFactor = 2
-    c.G_kwargs.FP16Stages = FP16Stages
+    c.G_kwargs.FFNWidthRatio = 2
+    c.G_kwargs.ChannelsPerConvolutionGroup = 32
+    c.G_kwargs.AttentionWidthRatio = 1
+    c.G_kwargs.ChannelsPerAttentionHead = 64
     
     c.D_kwargs.WidthPerStage = [*reversed(WidthPerStage)]
-    c.D_kwargs.CardinalityPerStage = [*reversed(CardinalityPerStage)]
     c.D_kwargs.BlocksPerStage = [*reversed(BlocksPerStage)]
-    c.D_kwargs.ExpansionFactor = 2
-    c.D_kwargs.FP16Stages = [x + len(FP16Stages) for x in FP16Stages]
+    c.D_kwargs.FFNWidthRatio = 2
+    c.D_kwargs.ChannelsPerConvolutionGroup = 32
+    c.D_kwargs.AttentionWidthRatio = 1
+    c.D_kwargs.ChannelsPerAttentionHead = 64
     
     
     c.metrics = opts.metrics

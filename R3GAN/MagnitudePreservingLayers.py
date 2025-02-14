@@ -13,6 +13,14 @@ def Normalize(x, Dimensions=None, ε=1e-4):
 def LeakyReLU(x):
     return bias_act.bias_act(x, None, act='lrelu', gain=math.sqrt(2 / (1 + 0.2 ** 2)))
     
+def CosineAttention(x, Heads, QKVLayer, ProjectionLayer):
+    y = QKVLayer(x)
+    y = y.reshape(y.shape[0], Heads, -1, 3, y.shape[2] * y.shape[3])
+    q, k, v = Normalize(y, Dimensions=2).unbind(3)
+    w = torch.einsum('nhcq,nhck->nhqk', q, k / math.sqrt(q.shape[2])).softmax(dim=3)
+    y = torch.einsum('nhqk,nhck->nhcq', w, v)
+    return ProjectionLayer(y.reshape(*x.shape))
+    
 class WeightNormalizedConvolution(nn.Module):
     def __init__(self, InputChannels, OutputChannels, Groups, EnablePadding, KernelSize):
         super(WeightNormalizedConvolution, self).__init__()
@@ -22,15 +30,13 @@ class WeightNormalizedConvolution(nn.Module):
 
     def forward(self, x, Gain=1):
         w = self.Weight.to(torch.float32)
+        w = w - torch.mean(w, axis=list(range(1, w.ndim)), keepdim=True)
         w = Normalize(w)
         w = w * (Gain / math.sqrt(w[0].numel()))
         w = w.to(x.dtype)
         if w.ndim == 2:
             return x @ w.t()
         return torch.nn.functional.conv2d(x, w, padding=(w.shape[-1]//2,) if self.EnablePadding else 0, groups=self.Groups)
-
-    def NormalizeWeight(self):
-        self.Weight.copy_(Normalize(self.Weight.detach()))
         
 def Convolution(InputChannels, OutputChannels, KernelSize, Groups=1):
     return WeightNormalizedConvolution(InputChannels, OutputChannels, Groups, True, [KernelSize, KernelSize])
@@ -45,10 +51,8 @@ class SpatialExtentCreator(nn.Module):
         self.Basis = nn.Parameter(torch.empty(OutputChannels, 4, 4).normal_(0, 1))
         
     def forward(self, x):
-        return Normalize(self.Basis).view(1, -1, 4, 4) * x.view(x.shape[0], -1, 1, 1)
-    
-    def NormalizeWeight(self):
-        self.Basis.copy_(Normalize(self.Basis.detach()))
+        Basis = Normalize(self.Basis - torch.mean(self.Basis, axis=[1, 2], keepdim=True))
+        return Basis.view(1, -1, 4, 4) * x.view(x.shape[0], -1, 1, 1)
     
 class SpatialExtentRemover(nn.Module):
     def __init__(self, InputChannels):

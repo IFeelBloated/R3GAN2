@@ -31,6 +31,11 @@ class R3GANLoss:
             training_stats.report('Loss/signs/fake', RelativisticLogits.sign())
             training_stats.report('Loss/G/loss', AdversarialLoss)
             
+            for i, l in enumerate(self.trainer.Generator.Model.MainLayers):
+                for j, a in enumerate(l.ParameterizedAlphas):
+                    Alpha = torch.abs(torch.tanh(a))
+                    training_stats.report('ResidualG/'+str(i)+'/'+str(j), Alpha.mean())
+            
         # D
         if phase == 'D':
             AdversarialLoss, RelativisticLogits, R1Penalty, R2Penalty = self.trainer.AccumulateDiscriminatorGradients(gen_z, real_img, real_c, gamma, gain, self.preprocessor)
@@ -40,5 +45,10 @@ class R3GANLoss:
             training_stats.report('Loss/D/loss', AdversarialLoss)
             training_stats.report('Loss/r1_penalty', R1Penalty)
             training_stats.report('Loss/r2_penalty', R2Penalty)
+            
+            for i, l in enumerate(self.trainer.Discriminator.Model.MainLayers):
+                for j, a in enumerate(l.ParameterizedAlphas):
+                    Alpha = torch.abs(torch.tanh(a))
+                    training_stats.report('ResidualD/'+str(i)+'/'+str(j), Alpha.mean())
             
 #----------------------------------------------------------------------------

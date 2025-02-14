@@ -8,7 +8,6 @@ class Generator(nn.Module):
         super(Generator, self).__init__()
         
         config = copy.deepcopy(kw)
-        del config['FP16Stages']
         del config['c_dim']
         del config['img_resolution']
         
@@ -20,8 +19,8 @@ class Generator(nn.Module):
         self.c_dim = kw['c_dim']
         self.img_resolution = kw['img_resolution']
         
-        for x in kw['FP16Stages']:
-            self.Model.DataTypePerStage[x] = torch.bfloat16
+        self.Model.DataTypePerStage = [torch.bfloat16 for _ in self.Model.DataTypePerStage]
+        self.Model.DataTypePerStage[0] = torch.float32
         
     def forward(self, x, c):
         return self.Model(x, c)
@@ -31,7 +30,6 @@ class Discriminator(nn.Module):
         super(Discriminator, self).__init__()
         
         config = copy.deepcopy(kw)
-        del config['FP16Stages']
         del config['c_dim']
         del config['img_resolution']
         
@@ -40,8 +38,8 @@ class Discriminator(nn.Module):
         
         self.Model = R3GAN.Networks.Discriminator(*args, **config)
         
-        for x in kw['FP16Stages']:
-            self.Model.DataTypePerStage[x] = torch.bfloat16
+        self.Model.DataTypePerStage = [torch.bfloat16 for _ in self.Model.DataTypePerStage]
+        self.Model.DataTypePerStage[-1] = torch.float32
         
     def forward(self, x, c):
         return self.Model(x, c)
