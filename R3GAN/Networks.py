@@ -148,6 +148,7 @@ class Discriminator(nn.Module):
         
         self.BasisLayer = DiscriminativeBasis(WidthPerStage[-1], 1 if ConditionDimension is None else ConditionEmbeddingDimension)
         self.ExtractionLayer = Convolution(3 + 1, WidthPerStage[0], KernelSize=KernelSize)
+        self.Bias = torch.nn.Parameter(torch.zeros([]))
         
         if ConditionDimension is not None:
             self.EmbeddingLayer = Linear(ConditionDimension, ConditionEmbeddingDimension)
@@ -157,7 +158,7 @@ class Discriminator(nn.Module):
         
     def forward(self, x, y=None):
         x = x.to(self.DataTypePerStage[0])
-        x = self.ExtractionLayer(torch.cat([x, torch.ones_like(x[:, :1])], dim=1))
+        x = self.ExtractionLayer(torch.cat([x, math.sqrt(3) * self.Bias.to(x.dtype) * torch.ones_like(x[:, :1])], dim=1))
         
         for Layer, Transition, DataType in zip(self.MainLayers[:-1], self.TransitionLayers, self.DataTypePerStage[:-1]):
             x, AccumulatedVariance = Layer(x.to(DataType))
