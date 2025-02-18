@@ -33,7 +33,6 @@ class R3GANLoss:
             training_stats.report('Loss/G/loss', AdversarialLoss)
             
             training_stats.report('Scale/G/gain', self.trainer.Generator.Model.Gain)
-            training_stats.report('Scale/G/bias', self.trainer.Generator.Model.Bias)
             
             for i, l in enumerate(self.trainer.Generator.Model.MainLayers):
                 for j, a in enumerate(l.ParameterizedAlphas):
