@@ -11,6 +11,7 @@
 from torch_utils import training_stats
 from R3GAN.Trainer import AdversarialTraining
 import torch
+import math
 
 #----------------------------------------------------------------------------
 
@@ -31,6 +32,8 @@ class R3GANLoss:
             training_stats.report('Loss/signs/fake', RelativisticLogits.sign())
             training_stats.report('Loss/G/loss', AdversarialLoss)
             
+            training_stats.report('Scale/G/gain', self.trainer.Generator.Model.Gain)
+            
             for i, l in enumerate(self.trainer.Generator.Model.MainLayers):
                 for j, a in enumerate(l.ParameterizedAlphas):
                     Alpha = torch.abs(torch.tanh(a))
@@ -45,6 +48,8 @@ class R3GANLoss:
             training_stats.report('Loss/D/loss', AdversarialLoss)
             training_stats.report('Loss/r1_penalty', R1Penalty)
             training_stats.report('Loss/r2_penalty', R2Penalty)
+            
+            training_stats.report('Scale/D/bias', math.sqrt(3) * self.trainer.Discriminator.Model.Bias)
             
             for i, l in enumerate(self.trainer.Discriminator.Model.MainLayers):
                 for j, a in enumerate(l.ParameterizedAlphas):

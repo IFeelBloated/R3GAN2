@@ -2,14 +2,14 @@ import math
 import torch
 import torch.nn as nn
 from .Resamplers import InterpolativeUpsampler, InterpolativeDownsampler
-from .MagnitudePreservingLayers import LeakyReLU, Convolution, Linear, CosineAttention, SpatialExtentCreator, SpatialExtentRemover
+from .MagnitudePreservingLayers import LeakyReLU, Convolution, Linear, CosineAttention, SpatialExtentCreator, SpatialExtentRemover, Normalize
 
 class MultiHeadSelfAttention(nn.Module):
     def __init__(self, InputChannels, HiddenChannels, ChannelsPerHead):
         super(MultiHeadSelfAttention, self).__init__()
 
         self.QKVLayer = Convolution(InputChannels, HiddenChannels * 3, KernelSize=1)
-        self.ProjectionLayer = Convolution(HiddenChannels, InputChannels, KernelSize=1)
+        self.ProjectionLayer = Convolution(HiddenChannels, InputChannels, KernelSize=1, Centered=True)
         self.Heads = HiddenChannels // ChannelsPerHead
 
     def forward(self, x, InputGain, ResidualGain):
@@ -22,9 +22,9 @@ class FeedForwardNetwork(nn.Module):
     def __init__(self, InputChannels, HiddenChannels, ChannelsPerGroup, KernelSize):
         super(FeedForwardNetwork, self).__init__()
         
-        self.LinearLayer1 = Convolution(InputChannels, HiddenChannels, KernelSize=1)
-        self.LinearLayer2 = Convolution(HiddenChannels, HiddenChannels, KernelSize=KernelSize, Groups=HiddenChannels // ChannelsPerGroup)
-        self.LinearLayer3 = Convolution(HiddenChannels, InputChannels, KernelSize=1)
+        self.LinearLayer1 = Convolution(InputChannels, HiddenChannels, KernelSize=1, Centered=True)
+        self.LinearLayer2 = Convolution(HiddenChannels, HiddenChannels, KernelSize=KernelSize, Groups=HiddenChannels // ChannelsPerGroup, Centered=True)
+        self.LinearLayer3 = Convolution(HiddenChannels, InputChannels, KernelSize=1, Centered=True)
         
     def forward(self, x, InputGain, ResidualGain):
         y = self.LinearLayer1(x, Gain=InputGain.view(1, -1, 1, 1))
@@ -121,7 +121,6 @@ class Generator(nn.Module):
         self.BasisLayer = GenerativeBasis(NoiseDimension + ConditionEmbeddingDimension, WidthPerStage[0])
         self.AggregationLayer = Convolution(WidthPerStage[-1], 3, KernelSize=KernelSize)
         self.Gain = torch.nn.Parameter(torch.ones([]))
-        self.Bias = torch.nn.Parameter(torch.zeros([]))
         
         if ConditionDimension is not None:
             self.EmbeddingLayer = Linear(ConditionDimension, ConditionEmbeddingDimension)
@@ -137,7 +136,7 @@ class Generator(nn.Module):
             x = Transition(x, Gain=torch.rsqrt(AccumulatedVariance))
         x, AccumulatedVariance = self.MainLayers[-1](x.to(self.DataTypePerStage[-1]))
 
-        return self.AggregationLayer(x, Gain=self.Gain * torch.rsqrt(AccumulatedVariance).view(1, -1, 1, 1)) + self.Bias.to(x.dtype)
+        return self.AggregationLayer(Normalize(x * torch.rsqrt(AccumulatedVariance).view(1, -1, 1, 1)), Gain=self.Gain)
 
 class Discriminator(nn.Module):
     def __init__(self, WidthPerStage, BlocksPerStage, FFNWidthRatio, ChannelsPerConvolutionGroup, AttentionWidthRatio, ChannelsPerAttentionHead, ConditionDimension=None, ConditionEmbeddingDimension=0, KernelSize=3, ResamplingFilter=[1, 2, 1]):
@@ -148,6 +147,7 @@ class Discriminator(nn.Module):
         
         self.BasisLayer = DiscriminativeBasis(WidthPerStage[-1], 1 if ConditionDimension is None else ConditionEmbeddingDimension)
         self.ExtractionLayer = Convolution(3 + 1, WidthPerStage[0], KernelSize=KernelSize)
+        self.Bias = torch.nn.Parameter(torch.zeros([]))
         
         if ConditionDimension is not None:
             self.EmbeddingLayer = Linear(ConditionDimension, ConditionEmbeddingDimension)
@@ -157,7 +157,7 @@ class Discriminator(nn.Module):
         
     def forward(self, x, y=None):
         x = x.to(self.DataTypePerStage[0])
-        x = self.ExtractionLayer(torch.cat([x, torch.ones_like(x[:, :1])], dim=1))
+        x = Normalize(self.ExtractionLayer(torch.cat([x, math.sqrt(3) * self.Bias.to(x.dtype) * torch.ones_like(x[:, :1])], dim=1)))
         
         for Layer, Transition, DataType in zip(self.MainLayers[:-1], self.TransitionLayers, self.DataTypePerStage[:-1]):
             x, AccumulatedVariance = Layer(x.to(DataType))

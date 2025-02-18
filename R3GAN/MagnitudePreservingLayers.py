@@ -22,15 +22,17 @@ def CosineAttention(x, Heads, QKVLayer, ProjectionLayer):
     return ProjectionLayer(y.reshape(*x.shape))
     
 class WeightNormalizedConvolution(nn.Module):
-    def __init__(self, InputChannels, OutputChannels, Groups, EnablePadding, KernelSize):
+    def __init__(self, InputChannels, OutputChannels, Groups, EnablePadding, KernelSize, Centered):
         super(WeightNormalizedConvolution, self).__init__()
         self.Groups = Groups
         self.EnablePadding = EnablePadding
+        self.Centered = Centered
         self.Weight = nn.Parameter(torch.randn(OutputChannels, InputChannels // Groups, *KernelSize))
 
     def forward(self, x, Gain=1):
         w = self.Weight.to(torch.float32)
-        w = w - torch.mean(w, axis=list(range(1, w.ndim)), keepdim=True)
+        if self.Centered:
+            w = w - torch.mean(w, axis=list(range(1, w.ndim)), keepdim=True)
         w = Normalize(w)
         w = w * (Gain / math.sqrt(w[0].numel()))
         w = w.to(x.dtype)
@@ -38,11 +40,11 @@ class WeightNormalizedConvolution(nn.Module):
             return x @ w.t()
         return torch.nn.functional.conv2d(x, w, padding=(w.shape[-1]//2,) if self.EnablePadding else 0, groups=self.Groups)
         
-def Convolution(InputChannels, OutputChannels, KernelSize, Groups=1):
-    return WeightNormalizedConvolution(InputChannels, OutputChannels, Groups, True, [KernelSize, KernelSize])
+def Convolution(InputChannels, OutputChannels, KernelSize, Groups=1, Centered=False):
+    return WeightNormalizedConvolution(InputChannels, OutputChannels, Groups, True, [KernelSize, KernelSize], Centered)
 
-def Linear(InputDimension, OutputDimension):
-    return WeightNormalizedConvolution(InputDimension, OutputDimension, 1, False, [])
+def Linear(InputDimension, OutputDimension, Centered=False):
+    return WeightNormalizedConvolution(InputDimension, OutputDimension, 1, False, [], Centered)
 
 class SpatialExtentCreator(nn.Module):
     def __init__(self, OutputChannels):
@@ -51,14 +53,13 @@ class SpatialExtentCreator(nn.Module):
         self.Basis = nn.Parameter(torch.empty(OutputChannels, 4, 4).normal_(0, 1))
         
     def forward(self, x):
-        Basis = Normalize(self.Basis - torch.mean(self.Basis, axis=[1, 2], keepdim=True))
-        return Basis.view(1, -1, 4, 4) * x.view(x.shape[0], -1, 1, 1)
+        return Normalize(self.Basis).view(1, -1, 4, 4) * x.view(x.shape[0], -1, 1, 1)
     
 class SpatialExtentRemover(nn.Module):
     def __init__(self, InputChannels):
         super(SpatialExtentRemover, self).__init__()
         
-        self.Basis = WeightNormalizedConvolution(InputChannels, InputChannels, InputChannels, False, [4, 4])
+        self.Basis = WeightNormalizedConvolution(InputChannels, InputChannels, InputChannels, False, [4, 4], False)
         
     def forward(self, x, Gain):
         return self.Basis(x, Gain=Gain).view(x.shape[0], -1)

@@ -27,15 +27,6 @@ from torch_utils.ops import grid_sample_gradfix
 import legacy
 from metrics import metric_main
 
-import math
-def get_norm(x, Dimensions=None, ε=1e-4):
-    if Dimensions is None:
-        Dimensions = list(range(1, x.ndim))
-    Norm = torch.linalg.vector_norm(x, dim=Dimensions, keepdim=True, dtype=torch.float32)
-    Norm = torch.add(ε, Norm, alpha=math.sqrt(Norm.numel() / x.numel()))
-    return Norm
-
-
 def cosine_decay_with_warmup(cur_nimg, base_value, total_nimg, final_value=0.0, warmup_value=0.0, warmup_nimg=0, hold_base_value_nimg=0):
     decay = 0.5 * (1 + np.cos(np.pi * (cur_nimg - warmup_nimg - hold_base_value_nimg) / float(total_nimg - warmup_nimg - hold_base_value_nimg)))
     cur_value = base_value + (1 - decay) * (final_value - base_value)
