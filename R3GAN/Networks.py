@@ -25,11 +25,12 @@ class FeedForwardNetwork(nn.Module):
         self.LinearLayer1 = Convolution(InputChannels, HiddenChannels, KernelSize=1, Centered=True)
         self.LinearLayer2 = Convolution(HiddenChannels, HiddenChannels, KernelSize=KernelSize, Groups=HiddenChannels // ChannelsPerGroup, Centered=True)
         self.LinearLayer3 = Convolution(HiddenChannels, InputChannels, KernelSize=1, Centered=True)
+        self.NonLinearity = LeakyReLU()
         
     def forward(self, x, InputGain, ResidualGain):
         y = self.LinearLayer1(x, Gain=InputGain.view(1, -1, 1, 1))
-        y = self.LinearLayer2(LeakyReLU(y))
-        y = self.LinearLayer3(LeakyReLU(y), Gain=ResidualGain.view(-1, 1, 1, 1))
+        y = self.LinearLayer2(self.NonLinearity(y))
+        y = self.LinearLayer3(self.NonLinearity(y), Gain=ResidualGain.view(-1, 1, 1, 1))
         
         return x + y
     
@@ -119,7 +120,7 @@ class Generator(nn.Module):
         self.TransitionLayers = nn.ModuleList([UpsampleLayer(WidthPerStage[x], WidthPerStage[x + 1], ResamplingFilter) for x in range(len(WidthPerStage) - 1)])
         
         self.BasisLayer = GenerativeBasis(NoiseDimension + ConditionEmbeddingDimension, WidthPerStage[0])
-        self.AggregationLayer = Convolution(WidthPerStage[-1], 3, KernelSize=KernelSize)
+        self.AggregationLayer = Convolution(WidthPerStage[-1], 3, KernelSize=1)
         self.Gain = torch.nn.Parameter(torch.ones([]))
         
         if ConditionDimension is not None:
@@ -146,8 +147,7 @@ class Discriminator(nn.Module):
         self.TransitionLayers = nn.ModuleList([DownsampleLayer(WidthPerStage[x], WidthPerStage[x + 1], ResamplingFilter) for x in range(len(WidthPerStage) - 1)])
         
         self.BasisLayer = DiscriminativeBasis(WidthPerStage[-1], 1 if ConditionDimension is None else ConditionEmbeddingDimension)
-        self.ExtractionLayer = Convolution(3 + 1, WidthPerStage[0], KernelSize=KernelSize)
-        self.Bias = torch.nn.Parameter(torch.zeros([]))
+        self.ExtractionLayer = Convolution(3 + 1, WidthPerStage[0], KernelSize=1)
         
         if ConditionDimension is not None:
             self.EmbeddingLayer = Linear(ConditionDimension, ConditionEmbeddingDimension)
@@ -157,7 +157,7 @@ class Discriminator(nn.Module):
         
     def forward(self, x, y=None):
         x = x.to(self.DataTypePerStage[0])
-        x = Normalize(self.ExtractionLayer(torch.cat([x, math.sqrt(3) * self.Bias.to(x.dtype) * torch.ones_like(x[:, :1])], dim=1)))
+        x = Normalize(self.ExtractionLayer(torch.cat([x, torch.ones_like(x[:, :1])], dim=1)))
         
         for Layer, Transition, DataType in zip(self.MainLayers[:-1], self.TransitionLayers, self.DataTypePerStage[:-1]):
             x, AccumulatedVariance = Layer(x.to(DataType))

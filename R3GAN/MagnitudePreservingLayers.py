@@ -9,9 +9,6 @@ def Normalize(x, Dimensions=None, ε=1e-4):
     Norm = torch.linalg.vector_norm(x, dim=Dimensions, keepdim=True, dtype=torch.float32)
     Norm = torch.add(ε, Norm, alpha=math.sqrt(Norm.numel() / x.numel()))
     return x / Norm.to(x.dtype)
-
-def LeakyReLU(x):
-    return bias_act.bias_act(x, None, act='lrelu', gain=math.sqrt(2 / (1 + 0.2 ** 2)))
     
 def CosineAttention(x, Heads, QKVLayer, ProjectionLayer):
     y = QKVLayer(x)
@@ -21,9 +18,20 @@ def CosineAttention(x, Heads, QKVLayer, ProjectionLayer):
     y = torch.einsum('nhqk,nhck->nhcq', w, v)
     return ProjectionLayer(y.reshape(*x.shape))
     
+class LeakyReLU(nn.Module):
+    def __init__(self, α=0.2):
+        super(LeakyReLU, self).__init__()
+        
+        self.α = α
+        self.Gain = 1 / math.sqrt(((1 + α ** 2) - (1 - α) ** 2 / math.pi) / 2)
+
+    def forward(self, x):
+        return bias_act.bias_act(x, None, act='lrelu', alpha=self.α, gain=self.Gain)
+
 class WeightNormalizedConvolution(nn.Module):
     def __init__(self, InputChannels, OutputChannels, Groups, EnablePadding, KernelSize, Centered):
         super(WeightNormalizedConvolution, self).__init__()
+        
         self.Groups = Groups
         self.EnablePadding = EnablePadding
         self.Centered = Centered
