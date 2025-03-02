@@ -126,18 +126,16 @@ class Generator(nn.Module):
         if ConditionDimension is not None:
             self.EmbeddingLayer = Linear(ConditionDimension, ConditionEmbeddingDimension)
         
-        self.DataTypePerStage = [torch.float32 for _ in WidthPerStage]
-        
     def forward(self, x, y=None):
         x = torch.cat([x, self.EmbeddingLayer(y)], dim=1) if hasattr(self, 'EmbeddingLayer') else x
-        x = self.BasisLayer(x)
+        x = self.BasisLayer(x).to(torch.bfloat16)
         
-        for Layer, Transition, DataType in zip(self.MainLayers[:-1], self.TransitionLayers, self.DataTypePerStage[:-1]):
-            x, AccumulatedVariance = Layer(x.to(DataType))
+        for Layer, Transition in zip(self.MainLayers[:-1], self.TransitionLayers):
+            x, AccumulatedVariance = Layer(x)
             x = Transition(x, Gain=torch.rsqrt(AccumulatedVariance))
-        x, AccumulatedVariance = self.MainLayers[-1](x.to(self.DataTypePerStage[-1]))
+        x, AccumulatedVariance = self.MainLayers[-1](x)
 
-        return self.AggregationLayer(Normalize(x * torch.rsqrt(AccumulatedVariance).view(1, -1, 1, 1)), Gain=self.Gain)
+        return self.AggregationLayer(Normalize(x * torch.rsqrt(AccumulatedVariance).view(1, -1, 1, 1).to(x.dtype)), Gain=self.Gain)
 
 class Discriminator(nn.Module):
     def __init__(self, WidthPerStage, BlocksPerStage, FFNWidthRatio, ChannelsPerConvolutionGroup, AttentionWidthRatio, ChannelsPerAttentionHead, ConditionDimension=None, ConditionEmbeddingDimension=0, KernelSize=3, ResamplingFilter=[1, 2, 1]):
@@ -152,19 +150,17 @@ class Discriminator(nn.Module):
         if ConditionDimension is not None:
             self.EmbeddingLayer = Linear(ConditionDimension, ConditionEmbeddingDimension)
             self.EmbeddingGain = 1 / math.sqrt(ConditionEmbeddingDimension)
-            
-        self.DataTypePerStage = [torch.float32 for _ in WidthPerStage]
         
     def forward(self, x, y=None):
-        x = x.to(self.DataTypePerStage[0])
+        x = x.to(torch.bfloat16)
         x = Normalize(self.ExtractionLayer(torch.cat([x, torch.ones_like(x[:, :1])], dim=1)))
         
-        for Layer, Transition, DataType in zip(self.MainLayers[:-1], self.TransitionLayers, self.DataTypePerStage[:-1]):
-            x, AccumulatedVariance = Layer(x.to(DataType))
+        for Layer, Transition in zip(self.MainLayers[:-1], self.TransitionLayers):
+            x, AccumulatedVariance = Layer(x)
             x = Transition(x, Gain=torch.rsqrt(AccumulatedVariance))
-        x, AccumulatedVariance = self.MainLayers[-1](x.to(self.DataTypePerStage[-1]))
+        x, AccumulatedVariance = self.MainLayers[-1](x)
         
-        x = self.BasisLayer(x, Gain=torch.rsqrt(AccumulatedVariance))
+        x = self.BasisLayer(x.to(torch.float32), Gain=torch.rsqrt(AccumulatedVariance))
         x = (x * self.EmbeddingLayer(y, Gain=self.EmbeddingGain)).sum(dim=1, keepdim=True) if hasattr(self, 'EmbeddingLayer') else x
         
         return x.view(x.shape[0])
