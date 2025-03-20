@@ -1,14 +1,14 @@
 import math
 import torch
 import torch.nn as nn
-from .Resamplers import InterpolativeUpsampler, InterpolativeDownsampler
-from .MagnitudePreservingLayers import LeakyReLU, Convolution, Linear, CosineAttention, SpatialExtentCreator, SpatialExtentRemover, Normalize
+from .Resamplers import InterpolativeUpsampler, InterpolativeDownsampler, InplaceUpsampler, InplaceDownsampler
+from .MagnitudePreservingLayers import LeakyReLU, Convolution, Linear, BiasedPointwiseConvolution, CosineAttention
 
 class MultiHeadSelfAttention(nn.Module):
     def __init__(self, InputChannels, HiddenChannels, ChannelsPerHead):
         super(MultiHeadSelfAttention, self).__init__()
 
-        self.QKVLayer = Convolution(InputChannels, HiddenChannels * 3, KernelSize=1)
+        self.QKVLayer = BiasedPointwiseConvolution(InputChannels, HiddenChannels * 3, Centered=True)
         self.ProjectionLayer = Convolution(HiddenChannels, InputChannels, KernelSize=1, Centered=True)
         self.Heads = HiddenChannels // ChannelsPerHead
 
@@ -22,7 +22,7 @@ class FeedForwardNetwork(nn.Module):
     def __init__(self, InputChannels, HiddenChannels, ChannelsPerGroup, KernelSize):
         super(FeedForwardNetwork, self).__init__()
         
-        self.LinearLayer1 = Convolution(InputChannels, HiddenChannels, KernelSize=1, Centered=True)
+        self.LinearLayer1 = BiasedPointwiseConvolution(InputChannels, HiddenChannels, Centered=True)
         self.LinearLayer2 = Convolution(HiddenChannels, HiddenChannels, KernelSize=KernelSize, Groups=HiddenChannels // ChannelsPerGroup, Centered=True)
         self.LinearLayer3 = Convolution(HiddenChannels, InputChannels, KernelSize=1, Centered=True)
         self.NonLinearity = LeakyReLU()
@@ -39,12 +39,11 @@ class ResidualGroup(nn.Module):
         super(ResidualGroup, self).__init__()
         
         self.Layers = nn.ModuleList([Block(**Arguments) for Block, Arguments in BlockConstructors])
-        self.ParameterizedAlphas = nn.ParameterList([torch.nn.Parameter(torch.zeros(InputChannels)) for _ in range(len(self.Layers))])
+        self.Alphas = nn.ParameterList([torch.nn.Parameter(torch.zeros(InputChannels)) for _ in range(len(self.Layers))])
 
     def forward(self, x):
         AccumulatedVariance = torch.ones([]).to(x.device)
-        for ParameterizedAlpha, Layer in zip(self.ParameterizedAlphas, self.Layers):
-            Alpha = torch.tanh(ParameterizedAlpha)
+        for Alpha, Layer in zip(self.Alphas, self.Layers):
             x = Layer(x, InputGain=torch.rsqrt(AccumulatedVariance), ResidualGain=Alpha)
             AccumulatedVariance = AccumulatedVariance + Alpha * Alpha
         
@@ -54,51 +53,60 @@ class UpsampleLayer(nn.Module):
     def __init__(self, InputChannels, OutputChannels, ResamplingFilter):
         super(UpsampleLayer, self).__init__()
         
-        self.Resampler = InterpolativeUpsampler(ResamplingFilter)
-
-        if InputChannels != OutputChannels:
-            self.LinearLayer = Convolution(InputChannels, OutputChannels, KernelSize=1)
+        self.FastPath = InputChannels == OutputChannels
+        
+        if self.FastPath:
+            self.Resampler = InterpolativeUpsampler(ResamplingFilter)
+        else:
+            self.Resampler = InplaceUpsampler(ResamplingFilter)
+            self.DuplicationRate = OutputChannels * 4 // InputChannels
         
     def forward(self, x, Gain):
-        x = self.LinearLayer(x, Gain=Gain.view(1, -1, 1, 1)) if hasattr(self, 'LinearLayer') else x * Gain.view(1, -1, 1, 1).to(x.dtype)
-        x = self.Resampler(x)
+        x = x * Gain.view(1, -1, 1, 1).to(x.dtype)
         
-        return x
-    
+        if self.FastPath:
+            return self.Resampler(x)
+        else:
+            return self.Resampler(x.repeat_interleave(self.DuplicationRate, dim=1))
+        
 class DownsampleLayer(nn.Module):
     def __init__(self, InputChannels, OutputChannels, ResamplingFilter):
         super(DownsampleLayer, self).__init__()
         
-        self.Resampler = InterpolativeDownsampler(ResamplingFilter)
-
-        if InputChannels != OutputChannels:
-            self.LinearLayer = Convolution(InputChannels, OutputChannels, KernelSize=1)
+        self.FastPath = InputChannels == OutputChannels
+        
+        if self.FastPath:
+            self.Resampler = InterpolativeDownsampler(ResamplingFilter)
+        else:
+            self.Resampler = InplaceDownsampler(ResamplingFilter)
+            self.ReductionRate = InputChannels * 4 // OutputChannels
         
     def forward(self, x, Gain):
-        x = self.Resampler(x)
-        x = self.LinearLayer(x, Gain=Gain.view(1, -1, 1, 1)) if hasattr(self, 'LinearLayer') else x * Gain.view(1, -1, 1, 1).to(x.dtype)
+        x = self.Resampler(x * Gain.view(1, -1, 1, 1).to(x.dtype))
         
-        return x
+        if self.FastPath:
+            return x
+        else:
+            return x.view(x.shape[0], -1, self.ReductionRate, x.shape[2], x.shape[3]).mean(dim=2)
     
 class GenerativeBasis(nn.Module):
     def __init__(self, InputDimension, OutputChannels):
         super(GenerativeBasis, self).__init__()
         
-        self.Basis = SpatialExtentCreator(OutputChannels)
-        self.LinearLayer = Linear(InputDimension, OutputChannels)
+        self.LinearLayer = Linear(InputDimension, OutputChannels * 4 * 4)
         
     def forward(self, x):
-        return self.Basis(self.LinearLayer(x))
+        return self.LinearLayer(x).view(x.shape[0], -1, 4, 4)
     
 class DiscriminativeBasis(nn.Module):
     def __init__(self, InputChannels, OutputDimension):
         super(DiscriminativeBasis, self).__init__()
         
-        self.Basis = SpatialExtentRemover(InputChannels)
-        self.LinearLayer = Linear(InputChannels, OutputDimension)
+        self.LinearLayer = Linear(InputChannels * 4 * 4, OutputDimension)
         
     def forward(self, x, Gain):
-        return self.LinearLayer(self.Basis(x, Gain=Gain.view(-1, 1, 1, 1)))
+        x = x * Gain.view(1, -1, 1, 1).to(x.dtype)
+        return self.LinearLayer(x.view(x.shape[0], -1))
     
 def BuildResidualGroups(WidthPerStage, BlocksPerStage, FFNWidthRatio, ChannelsPerConvolutionGroup, KernelSize, AttentionWidthRatio, ChannelsPerAttentionHead):
     ResidualGroups = []
@@ -135,7 +143,7 @@ class Generator(nn.Module):
             x = Transition(x, Gain=torch.rsqrt(AccumulatedVariance))
         x, AccumulatedVariance = self.MainLayers[-1](x)
 
-        return self.AggregationLayer(Normalize(x * torch.rsqrt(AccumulatedVariance).view(1, -1, 1, 1).to(x.dtype)), Gain=self.Gain)
+        return self.AggregationLayer(x, Gain=self.Gain * torch.rsqrt(AccumulatedVariance).view(1, -1, 1, 1))
 
 class Discriminator(nn.Module):
     def __init__(self, WidthPerStage, BlocksPerStage, FFNWidthRatio, ChannelsPerConvolutionGroup, AttentionWidthRatio, ChannelsPerAttentionHead, ConditionDimension=None, ConditionEmbeddingDimension=0, KernelSize=3, ResamplingFilter=[1, 2, 1]):
@@ -145,15 +153,14 @@ class Discriminator(nn.Module):
         self.TransitionLayers = nn.ModuleList([DownsampleLayer(WidthPerStage[x], WidthPerStage[x + 1], ResamplingFilter) for x in range(len(WidthPerStage) - 1)])
         
         self.BasisLayer = DiscriminativeBasis(WidthPerStage[-1], 1 if ConditionDimension is None else ConditionEmbeddingDimension)
-        self.ExtractionLayer = Convolution(3 + 1, WidthPerStage[0], KernelSize=1)
+        self.ExtractionLayer = Convolution(3, WidthPerStage[0], KernelSize=1)
         
         if ConditionDimension is not None:
             self.EmbeddingLayer = Linear(ConditionDimension, ConditionEmbeddingDimension)
             self.EmbeddingGain = 1 / math.sqrt(ConditionEmbeddingDimension)
         
     def forward(self, x, y=None):
-        x = x.to(torch.bfloat16)
-        x = Normalize(self.ExtractionLayer(torch.cat([x, torch.ones_like(x[:, :1])], dim=1)))
+        x = self.ExtractionLayer(x.to(torch.bfloat16))
         
         for Layer, Transition in zip(self.MainLayers[:-1], self.TransitionLayers):
             x, AccumulatedVariance = Layer(x)

@@ -16,7 +16,7 @@ def CosineAttention(x, Heads, QKVLayer, ProjectionLayer):
     q, k, v = Normalize(y, Dimensions=2).unbind(3)
     w = torch.einsum('nhcq,nhck->nhqk', q, k / math.sqrt(q.shape[2])).softmax(dim=3)
     y = torch.einsum('nhqk,nhck->nhcq', w, v)
-    return ProjectionLayer(y.reshape(*x.shape))
+    return ProjectionLayer(y.reshape(x.shape[0], -1, x.shape[2], x.shape[3]))
     
 class LeakyReLU(nn.Module):
     def __init__(self, α=0.2):
@@ -46,7 +46,7 @@ class WeightNormalizedConvolution(nn.Module):
         w = w.to(x.dtype)
         if w.ndim == 2:
             return x @ w.t()
-        return torch.nn.functional.conv2d(x, w, padding=(w.shape[-1]//2,) if self.EnablePadding else 0, groups=self.Groups)
+        return nn.functional.conv2d(x, w, padding=(w.shape[-1]//2,) if self.EnablePadding else 0, groups=self.Groups)
         
 def Convolution(InputChannels, OutputChannels, KernelSize, Groups=1, Centered=False):
     return WeightNormalizedConvolution(InputChannels, OutputChannels, Groups, True, [KernelSize, KernelSize], Centered)
@@ -54,20 +54,20 @@ def Convolution(InputChannels, OutputChannels, KernelSize, Groups=1, Centered=Fa
 def Linear(InputDimension, OutputDimension, Centered=False):
     return WeightNormalizedConvolution(InputDimension, OutputDimension, 1, False, [], Centered)
 
-class SpatialExtentCreator(nn.Module):
-    def __init__(self, OutputChannels):
-        super(SpatialExtentCreator, self).__init__()
+class BiasedPointwiseConvolution(nn.Module):
+    def __init__(self, InputChannels, OutputChannels, Centered=False):
+        super(BiasedPointwiseConvolution, self).__init__()
         
-        self.Basis = nn.Parameter(torch.empty(OutputChannels, 4, 4).normal_(0, 1))
-        
-    def forward(self, x):
-        return Normalize(self.Basis).view(1, -1, 4, 4) * x.view(x.shape[0], -1, 1, 1)
-    
-class SpatialExtentRemover(nn.Module):
-    def __init__(self, InputChannels):
-        super(SpatialExtentRemover, self).__init__()
-        
-        self.Basis = WeightNormalizedConvolution(InputChannels, InputChannels, InputChannels, False, [4, 4], False)
-        
-    def forward(self, x, Gain):
-        return self.Basis(x, Gain=Gain).view(x.shape[0], -1)
+        self.Centered = Centered
+        self.Weight = nn.Parameter(torch.randn(OutputChannels, InputChannels + 1, 1, 1))
+
+    def forward(self, x, Gain=1):
+        w = self.Weight.to(torch.float32)
+        if self.Centered:
+            w = w - torch.mean(w, axis=list(range(1, w.ndim)), keepdim=True)
+        w = Normalize(w)
+        w = w / math.sqrt(w[0].numel())
+        b = w[:, -1, :, :].view(-1).to(x.dtype)
+        w = w[:, :-1, :, :] * Gain
+        w = w.to(x.dtype)
+        return nn.functional.conv2d(x, w, b)
