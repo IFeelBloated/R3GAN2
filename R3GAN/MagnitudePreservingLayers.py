@@ -71,3 +71,21 @@ class BiasedPointwiseConvolution(nn.Module):
         w = w[:, :-1, :, :] * Gain
         w = w.to(x.dtype)
         return nn.functional.conv2d(x, w, b)
+    
+class SpatialExtentCreator(nn.Module):
+    def __init__(self, OutputChannels):
+        super(SpatialExtentCreator, self).__init__()
+        
+        self.Basis = nn.Parameter(torch.empty(OutputChannels, 8, 8).normal_(0, 1))
+        
+    def forward(self, x):
+        return Normalize(self.Basis).view(1, -1, 8, 8) * x.view(x.shape[0], -1, 1, 1)
+    
+class SpatialExtentRemover(nn.Module):
+    def __init__(self, InputChannels):
+        super(SpatialExtentRemover, self).__init__()
+        
+        self.Basis = WeightNormalizedConvolution(InputChannels, InputChannels, InputChannels, False, [8, 8], False)
+        
+    def forward(self, x, Gain):
+        return self.Basis(x, Gain=Gain).view(x.shape[0], -1)

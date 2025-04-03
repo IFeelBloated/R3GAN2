@@ -2,7 +2,7 @@ import math
 import torch
 import torch.nn as nn
 from .Resamplers import InterpolativeUpsampler, InterpolativeDownsampler, InplaceUpsampler, InplaceDownsampler
-from .MagnitudePreservingLayers import LeakyReLU, Convolution, Linear, BiasedPointwiseConvolution, CosineAttention
+from .MagnitudePreservingLayers import LeakyReLU, Convolution, Linear, BiasedPointwiseConvolution, CosineAttention, SpatialExtentCreator, SpatialExtentRemover
 
 class MultiHeadSelfAttention(nn.Module):
     def __init__(self, InputChannels, HiddenChannels, ChannelsPerHead):
@@ -44,8 +44,8 @@ class ResidualGroup(nn.Module):
     def forward(self, x):
         AccumulatedVariance = torch.ones([]).to(x.device)
         for Alpha, Layer in zip(self.Alphas, self.Layers):
-            x = Layer(x, InputGain=torch.rsqrt(AccumulatedVariance), ResidualGain=Alpha)
-            AccumulatedVariance = AccumulatedVariance + Alpha * Alpha
+            x = Layer(x, InputGain=torch.rsqrt(AccumulatedVariance) / math.sqrt(len(self.Layers)), ResidualGain=Alpha)
+            AccumulatedVariance = AccumulatedVariance + Alpha * Alpha / len(self.Layers)
         
         return x, AccumulatedVariance
     
@@ -93,20 +93,21 @@ class GenerativeBasis(nn.Module):
     def __init__(self, InputDimension, OutputChannels):
         super(GenerativeBasis, self).__init__()
         
-        self.LinearLayer = Linear(InputDimension, OutputChannels * 4 * 4)
+        self.Basis = SpatialExtentCreator(OutputChannels)
+        self.LinearLayer = Linear(InputDimension, OutputChannels)
         
     def forward(self, x):
-        return self.LinearLayer(x).view(x.shape[0], -1, 4, 4)
+        return self.Basis(self.LinearLayer(x))
     
 class DiscriminativeBasis(nn.Module):
     def __init__(self, InputChannels, OutputDimension):
         super(DiscriminativeBasis, self).__init__()
         
-        self.LinearLayer = Linear(InputChannels * 4 * 4, OutputDimension)
+        self.Basis = SpatialExtentRemover(InputChannels)
+        self.LinearLayer = Linear(InputChannels, OutputDimension)
         
     def forward(self, x, Gain):
-        x = x * Gain.view(1, -1, 1, 1).to(x.dtype)
-        return self.LinearLayer(x.view(x.shape[0], -1))
+        return self.LinearLayer(self.Basis(x, Gain=Gain.view(-1, 1, 1, 1)))
     
 def BuildResidualGroups(WidthPerStage, BlocksPerStage, FFNWidthRatio, ChannelsPerConvolutionGroup, KernelSize, AttentionWidthRatio, ChannelsPerAttentionHead):
     ResidualGroups = []
