@@ -28,20 +28,34 @@ class LeakyReLU(nn.Module):
     def forward(self, x):
         return bias_act.bias_act(x, None, act='lrelu', alpha=self.α, gain=self.Gain)
 
+class NormalizedWeight(nn.Module):
+    def __init__(self, InputChannels, OutputChannels, Groups, KernelSize, Centered):
+        super(NormalizedWeight, self).__init__()
+        
+        self.Centered = Centered
+        self.Weight = nn.Parameter(torch.randn(OutputChannels, InputChannels // Groups, *KernelSize))
+        
+    def Evaluate(self, w):
+        if self.Centered:
+            w = w - torch.mean(w, axis=list(range(1, w.ndim)), keepdim=True)
+        return Normalize(w)
+        
+    def forward(self):
+        return self.Evaluate(self.Weight.to(torch.float32))
+    
+    def NormalizeWeight(self):
+        self.Weight.copy_(self.Evaluate(self.Weight.detach()))
+
 class WeightNormalizedConvolution(nn.Module):
     def __init__(self, InputChannels, OutputChannels, Groups, EnablePadding, KernelSize, Centered):
         super(WeightNormalizedConvolution, self).__init__()
         
         self.Groups = Groups
         self.EnablePadding = EnablePadding
-        self.Centered = Centered
-        self.Weight = nn.Parameter(torch.randn(OutputChannels, InputChannels // Groups, *KernelSize))
+        self.Weight = NormalizedWeight(InputChannels, OutputChannels, Groups, KernelSize, Centered)
 
     def forward(self, x, Gain=1):
-        w = self.Weight.to(torch.float32)
-        if self.Centered:
-            w = w - torch.mean(w, axis=list(range(1, w.ndim)), keepdim=True)
-        w = Normalize(w)
+        w = self.Weight()
         w = w * (Gain / math.sqrt(w[0].numel()))
         w = w.to(x.dtype)
         if w.ndim == 2:
@@ -58,14 +72,10 @@ class BiasedPointwiseConvolution(nn.Module):
     def __init__(self, InputChannels, OutputChannels, Centered=False):
         super(BiasedPointwiseConvolution, self).__init__()
         
-        self.Centered = Centered
-        self.Weight = nn.Parameter(torch.randn(OutputChannels, InputChannels + 1, 1, 1))
-
+        self.Weight = NormalizedWeight(InputChannels + 1, OutputChannels, 1, [1, 1], Centered)
+        
     def forward(self, x, Gain=1):
-        w = self.Weight.to(torch.float32)
-        if self.Centered:
-            w = w - torch.mean(w, axis=list(range(1, w.ndim)), keepdim=True)
-        w = Normalize(w)
+        w = self.Weight()
         w = w / math.sqrt(w[0].numel())
         b = w[:, -1, :, :].view(-1).to(x.dtype)
         w = w[:, :-1, :, :] * Gain
@@ -76,10 +86,10 @@ class SpatialExtentCreator(nn.Module):
     def __init__(self, OutputChannels):
         super(SpatialExtentCreator, self).__init__()
         
-        self.Basis = nn.Parameter(torch.empty(OutputChannels, 8, 8).normal_(0, 1))
+        self.Basis = NormalizedWeight(1, OutputChannels, 1, [8, 8], False)
         
     def forward(self, x):
-        return Normalize(self.Basis).view(1, -1, 8, 8) * x.view(x.shape[0], -1, 1, 1)
+        return self.Basis().view(1, -1, 8, 8) * x.view(x.shape[0], -1, 1, 1)
     
 class SpatialExtentRemover(nn.Module):
     def __init__(self, InputChannels):
