@@ -255,6 +255,7 @@ def main(**kwargs):
         c.beta2_scheduler = { 'base_value': 0.9, 'final_value': 0.99, 'total_nimg': decay_nimg }
 
     c.G_kwargs.NoiseDimension = NoiseDimension
+    c.G_kwargs.ModulationDimension = 512
     c.G_kwargs.WidthPerStage = WidthPerStage
     c.G_kwargs.BlocksPerStage = BlocksPerStage
     c.G_kwargs.FFNWidthRatio = 2
