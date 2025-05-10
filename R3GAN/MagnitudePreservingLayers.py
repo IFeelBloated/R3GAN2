@@ -79,18 +79,28 @@ def Convolution(InputChannels, OutputChannels, KernelSize, Groups=1, Centered=Fa
 def Linear(InputDimension, OutputDimension, Centered=False):
     return WeightNormalizedConvolution(InputDimension, OutputDimension, 1, False, [], Centered)
 
-class BiasedPointwiseConvolution(nn.Module):
-    def __init__(self, InputChannels, OutputChannels, Centered=False):
-        super(BiasedPointwiseConvolution, self).__init__()
+class BiasedPointwiseConvolutionWithModulation(nn.Module):
+    def __init__(self, InputChannels, OutputChannels, EmbeddingDimension, Centered=False):
+        super(BiasedPointwiseConvolutionWithModulation, self).__init__()
         
         self.Weight = NormalizedWeight(InputChannels + 1, OutputChannels, 1, [1, 1], Centered)
         
-    def forward(self, x, Gain=1, BiasGain=1):
+        if EmbeddingDimension is not None:
+            self.EmbeddingLayer = Linear(EmbeddingDimension, InputChannels, Centered)
+            self.EmbeddingGain = nn.Parameter(torch.zeros([]))
+        
+    def forward(self, x, c, Gain=1, BiasGain=1):
         w = self.Weight()
         w = w / math.sqrt(w[0].numel())
         b = w[:, -1, :, :].view(-1) * BiasGain
         w = w[:, :-1, :, :] * Gain
-        return nn.functional.conv2d(x, w.to(x.dtype), b.to(x.dtype))
+        if hasattr(self, 'EmbeddingLayer'):
+            c = self.EmbeddingLayer(c, Gain=self.EmbeddingGain) + 1
+            w = w.unsqueeze(0) * c.view(c.shape[0], 1, -1, 1, 1)
+            b = b.view(1, -1).repeat(x.shape[0], 1)
+            return nn.functional.conv2d(x.view(1, -1, *x.shape[2:]), w.view(-1, *w.shape[2:]).to(x.dtype), b.view(-1).to(x.dtype), groups=x.shape[0]).view(x.shape[0], -1, *x.shape[2:])
+        else:
+            return nn.functional.conv2d(x, w.to(x.dtype), b.to(x.dtype))
     
 class SpatialExtentCreator(nn.Module):
     def __init__(self, OutputChannels):

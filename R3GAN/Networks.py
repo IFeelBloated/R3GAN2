@@ -2,50 +2,33 @@ import math
 import torch
 import torch.nn as nn
 from .Resamplers import InterpolativeUpsampler, InterpolativeDownsampler, InplaceUpsampler, InplaceDownsampler
-from .MagnitudePreservingLayers import LeakyReLU, Convolution, Linear, BiasedPointwiseConvolution, CosineAttention, SpatialExtentCreator, SpatialExtentRemover, BoundedParameter
-
-class Modulator(nn.Module):
-    def __init__(self, InputChannels, EmbeddingDimension):
-        super(Modulator, self).__init__()
-        
-        if EmbeddingDimension is not None:
-            self.EmbeddingLayer = Linear(EmbeddingDimension, InputChannels, Centered=True)
-            self.EmbeddingGain = nn.Parameter(torch.zeros([]))
-
-    def forward(self, x, w):
-        if hasattr(self, 'EmbeddingLayer'):
-            c = self.EmbeddingLayer(w, Gain=self.EmbeddingGain) + 1
-            return x * c.view(c.shape[0], -1, 1, 1).to(x.dtype)
-        else:
-            return x
+from .MagnitudePreservingLayers import LeakyReLU, Convolution, Linear, BiasedPointwiseConvolutionWithModulation, CosineAttention, SpatialExtentCreator, SpatialExtentRemover, BoundedParameter
 
 class MultiHeadSelfAttention(nn.Module):
     def __init__(self, InputChannels, HiddenChannels, EmbeddingDimension, ChannelsPerHead):
         super(MultiHeadSelfAttention, self).__init__()
 
-        self.QKVLayer = BiasedPointwiseConvolution(InputChannels, HiddenChannels * 3, Centered=True)
+        self.QKVLayer = BiasedPointwiseConvolutionWithModulation(InputChannels, HiddenChannels * 3, EmbeddingDimension, Centered=True)
         self.ProjectionLayer = Convolution(HiddenChannels, InputChannels, KernelSize=1, Centered=True)
-        self.ConditionLayer = Modulator(InputChannels, EmbeddingDimension)
         self.Heads = HiddenChannels // ChannelsPerHead
 
     def forward(self, x, w, InputGain, ResidualGain, BiasGain):
-        QKVLayer = lambda y: self.QKVLayer(y, Gain=InputGain.view(1, -1, 1, 1), BiasGain=BiasGain)
+        QKVLayer = lambda y: self.QKVLayer(y, w, Gain=InputGain.view(1, -1, 1, 1), BiasGain=BiasGain)
         ProjectionLayer = lambda y: self.ProjectionLayer(y, Gain=ResidualGain.view(-1, 1, 1, 1))
         
-        return x + CosineAttention(self.ConditionLayer(x, w), self.Heads, QKVLayer, ProjectionLayer)
+        return x + CosineAttention(x, self.Heads, QKVLayer, ProjectionLayer)
 
 class FeedForwardNetwork(nn.Module):
     def __init__(self, InputChannels, HiddenChannels, EmbeddingDimension, ChannelsPerGroup, KernelSize):
         super(FeedForwardNetwork, self).__init__()
         
-        self.LinearLayer1 = BiasedPointwiseConvolution(InputChannels, HiddenChannels, Centered=True)
+        self.LinearLayer1 = BiasedPointwiseConvolutionWithModulation(InputChannels, HiddenChannels, EmbeddingDimension, Centered=True)
         self.LinearLayer2 = Convolution(HiddenChannels, HiddenChannels, KernelSize=KernelSize, Groups=HiddenChannels // ChannelsPerGroup, Centered=True)
         self.LinearLayer3 = Convolution(HiddenChannels, InputChannels, KernelSize=1, Centered=True)
-        self.ConditionLayer = Modulator(InputChannels, EmbeddingDimension)
         self.NonLinearity = LeakyReLU()
         
     def forward(self, x, w, InputGain, ResidualGain, BiasGain):
-        y = self.LinearLayer1(self.ConditionLayer(x, w), Gain=InputGain.view(1, -1, 1, 1), BiasGain=BiasGain)
+        y = self.LinearLayer1(x, w, Gain=InputGain.view(1, -1, 1, 1), BiasGain=BiasGain)
         y = self.LinearLayer2(self.NonLinearity(y))
         y = self.LinearLayer3(self.NonLinearity(y), Gain=ResidualGain.view(-1, 1, 1, 1))
         
