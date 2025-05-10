@@ -411,7 +411,7 @@ def training_loop(
                     for x in CollectGeneratorFeatures(G.Model, gen_z, real_c):
                         training_stats.report('MagnitudeG/avg/' + str(x.shape[2]), CollectMagnitude(x, 'avg'))
                         training_stats.report('MagnitudeG/max/' + str(x.shape[2]), CollectMagnitude(x, 'max'))
-                    for x in CollectDiscriminatorFeatures(D.Model, real_img):
+                    for x in CollectDiscriminatorFeatures(D.Model, real_img, real_c):
                         training_stats.report('MagnitudeD/avg/' + str(x.shape[2]), CollectMagnitude(x, 'avg'))
                         training_stats.report('MagnitudeD/max/' + str(x.shape[2]), CollectMagnitude(x, 'max'))
         

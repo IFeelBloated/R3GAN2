@@ -28,6 +28,16 @@ class LeakyReLU(nn.Module):
     def forward(self, x):
         return bias_act.bias_act(x, None, act='lrelu', alpha=self.α, gain=self.Gain)
 
+class BoundedParameter(nn.Module):
+    def __init__(self, Dimension, Bound=1):
+        super(BoundedParameter, self).__init__()
+        
+        self.Value = nn.Parameter(torch.zeros(Dimension))
+        self.Bound = Bound
+        
+    def forward(self):
+        return self.Bound * torch.tanh(self.Value / self.Bound)
+
 class NormalizedWeight(nn.Module):
     def __init__(self, InputChannels, OutputChannels, Groups, KernelSize, Centered):
         super(NormalizedWeight, self).__init__()
@@ -44,7 +54,8 @@ class NormalizedWeight(nn.Module):
         return self.Evaluate(self.Weight.to(torch.float32))
     
     def NormalizeWeight(self):
-        self.Weight.copy_(self.Evaluate(self.Weight.detach()))
+        pass
+        # self.Weight.copy_(self.Evaluate(self.Weight.detach()))
 
 class WeightNormalizedConvolution(nn.Module):
     def __init__(self, InputChannels, OutputChannels, Groups, EnablePadding, KernelSize, Centered):
@@ -60,7 +71,7 @@ class WeightNormalizedConvolution(nn.Module):
         w = w.to(x.dtype)
         if w.ndim == 2:
             return x @ w.t()
-        return nn.functional.conv2d(x, w, padding=(w.shape[-1]//2,) if self.EnablePadding else 0, groups=self.Groups)
+        return nn.functional.conv2d(x, w, padding=(w.shape[-1] // 2,) if self.EnablePadding else 0, groups=self.Groups)
         
 def Convolution(InputChannels, OutputChannels, KernelSize, Groups=1, Centered=False):
     return WeightNormalizedConvolution(InputChannels, OutputChannels, Groups, True, [KernelSize, KernelSize], Centered)
@@ -74,13 +85,12 @@ class BiasedPointwiseConvolution(nn.Module):
         
         self.Weight = NormalizedWeight(InputChannels + 1, OutputChannels, 1, [1, 1], Centered)
         
-    def forward(self, x, Gain=1):
+    def forward(self, x, Gain=1, BiasGain=1):
         w = self.Weight()
         w = w / math.sqrt(w[0].numel())
-        b = w[:, -1, :, :].view(-1).to(x.dtype)
+        b = w[:, -1, :, :].view(-1) * BiasGain
         w = w[:, :-1, :, :] * Gain
-        w = w.to(x.dtype)
-        return nn.functional.conv2d(x, w, b)
+        return nn.functional.conv2d(x, w.to(x.dtype), b.to(x.dtype))
     
 class SpatialExtentCreator(nn.Module):
     def __init__(self, OutputChannels):

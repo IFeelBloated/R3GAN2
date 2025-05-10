@@ -15,17 +15,22 @@ def CollectGeneratorFeatures(Generator, x, y):
 
     return f
 
-def CollectDiscriminatorFeatures(Discriminator, x):
+def CollectDiscriminatorFeatures(Discriminator, x, y):
+    if hasattr(Discriminator, 'EmbeddingLayer'):
+        y = Discriminator.EmbeddingLayer(y)
+        w = Discriminator.MappingLayer(y)
+    else:
+        w = None
     x = Discriminator.ExtractionLayer(x.to(torch.bfloat16))
     f = []
-        
+    
     for Layer, Transition in zip(Discriminator.MainLayers[:-1], Discriminator.TransitionLayers):
-        x, AccumulatedVariance = Layer(x)
+        x, AccumulatedVariance = Layer(x, w)
         f += [x * torch.rsqrt(AccumulatedVariance).view(1, -1, 1, 1).to(x.dtype)]
         x = Transition(x, Gain=torch.rsqrt(AccumulatedVariance))
-    x, AccumulatedVariance = Discriminator.MainLayers[-1](x)
+    x, AccumulatedVariance = Discriminator.MainLayers[-1](x, w)
     f += [x * torch.rsqrt(AccumulatedVariance).view(1, -1, 1, 1).to(x.dtype)]
-        
+    
     return f
 
 def CollectMagnitude(x, mode='avg'):
