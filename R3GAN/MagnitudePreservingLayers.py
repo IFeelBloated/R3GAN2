@@ -96,11 +96,8 @@ class BiasedPointwiseConvolutionWithModulation(nn.Module):
         w = w[:, :-1, :, :] * Gain
         if hasattr(self, 'EmbeddingLayer'):
             c = self.EmbeddingLayer(c, Gain=self.EmbeddingGain) + 1
-            w = w.unsqueeze(0) * c.view(c.shape[0], 1, -1, 1, 1)
-            b = b.view(1, -1).repeat(x.shape[0], 1)
-            return nn.functional.conv2d(x.view(1, -1, *x.shape[2:]), w.view(-1, *w.shape[2:]).to(x.dtype), b.view(-1).to(x.dtype), groups=x.shape[0]).view(x.shape[0], -1, *x.shape[2:])
-        else:
-            return nn.functional.conv2d(x, w.to(x.dtype), b.to(x.dtype))
+            x = x * c.view(c.shape[0], -1, 1, 1).to(x.dtype)
+        return nn.functional.conv2d(x, w.to(x.dtype), b.to(x.dtype))
     
 class SpatialExtentCreator(nn.Module):
     def __init__(self, OutputChannels):
