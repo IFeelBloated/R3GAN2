@@ -46,7 +46,7 @@ class ResidualGroup(nn.Module):
         for ParametrizedAlpha, Layer in zip(self.ParametrizedAlphas, self.Layers):
             Alpha = ParametrizedAlpha()
             x = Layer(x, w, InputGain=torch.rsqrt(AccumulatedVariance) / math.sqrt(len(self.Layers)), ResidualGain=Alpha, BiasGain=1 / math.sqrt(len(self.Layers)))
-            AccumulatedVariance = AccumulatedVariance + Alpha * Alpha / len(self.Layers)
+            AccumulatedVariance = AccumulatedVariance + Alpha * Alpha
         
         return x, AccumulatedVariance
     
