@@ -54,8 +54,7 @@ class NormalizedWeight(nn.Module):
         return self.Evaluate(self.Weight.to(torch.float32))
     
     def NormalizeWeight(self):
-        pass
-        # self.Weight.copy_(self.Evaluate(self.Weight.detach()))
+        self.Weight.copy_(self.Evaluate(self.Weight.detach()))
 
 class WeightNormalizedConvolution(nn.Module):
     def __init__(self, InputChannels, OutputChannels, Groups, EnablePadding, KernelSize, Centered):
