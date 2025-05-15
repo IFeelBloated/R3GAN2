@@ -116,3 +116,12 @@ class SpatialExtentRemover(nn.Module):
         
     def forward(self, x, Gain):
         return self.Basis(x, Gain=Gain).view(x.shape[0], -1)
+    
+class ClassEmbedder(nn.Module):
+    def __init__(self, NumberOfClasses, EmbeddingDimension):
+        super(ClassEmbedder, self).__init__()
+        
+        self.Weight = NormalizedWeight(EmbeddingDimension, NumberOfClasses, 1, [], False)
+    
+    def forward(self, x):
+        return x @ self.Weight().to(x.dtype)

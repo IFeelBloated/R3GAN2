@@ -2,7 +2,7 @@ import math
 import torch
 import torch.nn as nn
 from .Resamplers import InterpolativeUpsampler, InterpolativeDownsampler, InplaceUpsampler, InplaceDownsampler
-from .MagnitudePreservingLayers import LeakyReLU, Convolution, Linear, BiasedPointwiseConvolutionWithModulation, CosineAttention, SpatialExtentCreator, SpatialExtentRemover, BoundedParameter
+from .MagnitudePreservingLayers import LeakyReLU, Convolution, Linear, BiasedPointwiseConvolutionWithModulation, CosineAttention, SpatialExtentCreator, SpatialExtentRemover, BoundedParameter, ClassEmbedder
 
 class MultiHeadSelfAttention(nn.Module):
     def __init__(self, InputChannels, HiddenChannels, EmbeddingDimension, ChannelsPerHead):
@@ -134,20 +134,20 @@ class MultiLayerPerceptron(nn.Module):
         return self.NonLinearity(self.LinearLayer2(self.NonLinearity(self.LinearLayer1(x))))
 
 class Generator(nn.Module):
-    def __init__(self, NoiseDimension, ModulationDimension, WidthPerStage, BlocksPerStage, FFNWidthRatio, ChannelsPerConvolutionGroup, AttentionWidthRatio, ChannelsPerAttentionHead, ConditionDimension=None, ConditionEmbeddingDimension=0, KernelSize=3, ResamplingFilter=[1, 2, 1]):
+    def __init__(self, NoiseDimension, ModulationDimension, WidthPerStage, BlocksPerStage, FFNWidthRatio, ChannelsPerConvolutionGroup, AttentionWidthRatio, ChannelsPerAttentionHead, NumberOfClasses=None, ClassEmbeddingDimension=0, KernelSize=3, ResamplingFilter=[1, 2, 1]):
         super(Generator, self).__init__()
         
         self.MainLayers = nn.ModuleList(BuildResidualGroups(WidthPerStage, BlocksPerStage, ModulationDimension, FFNWidthRatio, ChannelsPerConvolutionGroup, KernelSize, AttentionWidthRatio, ChannelsPerAttentionHead))
         self.TransitionLayers = nn.ModuleList([UpsampleLayer(WidthPerStage[x], WidthPerStage[x + 1], ResamplingFilter) for x in range(len(WidthPerStage) - 1)])
         
-        self.BasisLayer = GenerativeBasis(NoiseDimension + ConditionEmbeddingDimension, WidthPerStage[0])
+        self.BasisLayer = GenerativeBasis(NoiseDimension + ClassEmbeddingDimension, WidthPerStage[0])
         self.AggregationLayer = Convolution(WidthPerStage[-1], 3, KernelSize=1)
         self.Gain = nn.Parameter(torch.ones([]))
         
-        self.MappingLayer = MultiLayerPerceptron(NoiseDimension + ConditionEmbeddingDimension, ModulationDimension, ModulationDimension)
+        self.MappingLayer = MultiLayerPerceptron(NoiseDimension + ClassEmbeddingDimension, ModulationDimension, ModulationDimension)
         
-        if ConditionDimension is not None:
-            self.EmbeddingLayer = Linear(ConditionDimension, ConditionEmbeddingDimension)
+        if NumberOfClasses is not None:
+            self.EmbeddingLayer = ClassEmbedder(NumberOfClasses, ClassEmbeddingDimension)
         
     def forward(self, x, y=None):
         x = torch.cat([x, self.EmbeddingLayer(y)], dim=1) if hasattr(self, 'EmbeddingLayer') else x
@@ -162,18 +162,18 @@ class Generator(nn.Module):
         return self.AggregationLayer(x, Gain=self.Gain * torch.rsqrt(AccumulatedVariance).view(1, -1, 1, 1))
 
 class Discriminator(nn.Module):
-    def __init__(self, ModulationDimension, WidthPerStage, BlocksPerStage, FFNWidthRatio, ChannelsPerConvolutionGroup, AttentionWidthRatio, ChannelsPerAttentionHead, ConditionDimension=None, ConditionEmbeddingDimension=0, KernelSize=3, ResamplingFilter=[1, 2, 1]):
+    def __init__(self, ModulationDimension, WidthPerStage, BlocksPerStage, FFNWidthRatio, ChannelsPerConvolutionGroup, AttentionWidthRatio, ChannelsPerAttentionHead, NumberOfClasses=None, ClassEmbeddingDimension=0, KernelSize=3, ResamplingFilter=[1, 2, 1]):
         super(Discriminator, self).__init__()
         
         self.MainLayers = nn.ModuleList(BuildResidualGroups(WidthPerStage, BlocksPerStage, ModulationDimension, FFNWidthRatio, ChannelsPerConvolutionGroup, KernelSize, AttentionWidthRatio, ChannelsPerAttentionHead))
         self.TransitionLayers = nn.ModuleList([DownsampleLayer(WidthPerStage[x], WidthPerStage[x + 1], ResamplingFilter) for x in range(len(WidthPerStage) - 1)])
         
-        self.BasisLayer = DiscriminativeBasis(WidthPerStage[-1], 1 if ConditionDimension is None else ConditionEmbeddingDimension)
+        self.BasisLayer = DiscriminativeBasis(WidthPerStage[-1], 1 if NumberOfClasses is None else ClassEmbeddingDimension)
         self.ExtractionLayer = Convolution(3, WidthPerStage[0], KernelSize=1)
         
-        if ConditionDimension is not None:
-            self.EmbeddingLayer = Linear(ConditionDimension, ConditionEmbeddingDimension)
-            self.MappingLayer = MultiLayerPerceptron(ConditionEmbeddingDimension, ModulationDimension, ModulationDimension)
+        if NumberOfClasses is not None:
+            self.EmbeddingLayer = ClassEmbedder(NumberOfClasses, ClassEmbeddingDimension)
+            self.MappingLayer = MultiLayerPerceptron(ClassEmbeddingDimension, ModulationDimension, ModulationDimension)
         
     def forward(self, x, y=None):
         if hasattr(self, 'EmbeddingLayer'):

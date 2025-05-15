@@ -180,8 +180,8 @@ def main(**kwargs):
         BlocksPerStage = [['FFN', 'FFN'], ['FFN', 'FFN'], ['FFN', 'FFN']]
         NoiseDimension = 64
        
-        c.G_kwargs.ConditionEmbeddingDimension = NoiseDimension
-        c.D_kwargs.ConditionEmbeddingDimension = WidthPerStage[0]
+        c.G_kwargs.ClassEmbeddingDimension = NoiseDimension
+        c.D_kwargs.ClassEmbeddingDimension = WidthPerStage[0]
        
         ema_nimg = 5000 * 1000
         decay_nimg = 2e7
@@ -225,8 +225,8 @@ def main(**kwargs):
         BlocksPerStage = [['FFN', 'FFN'], ['FFN', 'FFN'], ['FFN', 'FFN']]
         NoiseDimension = 64
        
-        c.G_kwargs.ConditionEmbeddingDimension = NoiseDimension
-        c.D_kwargs.ConditionEmbeddingDimension = WidthPerStage[0]
+        c.G_kwargs.ClassEmbeddingDimension = NoiseDimension
+        c.D_kwargs.ClassEmbeddingDimension = WidthPerStage[0]
        
         ema_nimg = 50000 * 1000
         decay_nimg = 2e8
@@ -242,8 +242,8 @@ def main(**kwargs):
         BlocksPerStage = [['FFN', 'FFN'], ['FFN', 'FFN'], ['FFN', 'FFN'], ['FFN', 'FFN']]
         NoiseDimension = 64
         
-        c.G_kwargs.ConditionEmbeddingDimension = NoiseDimension
-        c.D_kwargs.ConditionEmbeddingDimension = WidthPerStage[0]
+        c.G_kwargs.ClassEmbeddingDimension = NoiseDimension
+        c.D_kwargs.ClassEmbeddingDimension = WidthPerStage[0]
         
         ema_nimg = 50000 * 1000
         decay_nimg = 2e8

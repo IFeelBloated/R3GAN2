@@ -11,7 +11,7 @@ class Generator(nn.Module):
         del config['img_resolution']
         
         if kw['c_dim'] != 0:
-            config['ConditionDimension'] = kw['c_dim']
+            config['NumberOfClasses'] = kw['c_dim']
         
         self.Model = R3GAN.Networks.Generator(*args, **config)
         self.z_dim = kw['NoiseDimension']
@@ -30,7 +30,7 @@ class Discriminator(nn.Module):
         del config['img_resolution']
         
         if kw['c_dim'] != 0:
-            config['ConditionDimension'] = kw['c_dim']
+            config['NumberOfClasses'] = kw['c_dim']
         
         self.Model = R3GAN.Networks.Discriminator(*args, **config)
         
