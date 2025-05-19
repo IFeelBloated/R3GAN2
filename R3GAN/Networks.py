@@ -12,8 +12,8 @@ class MultiHeadSelfAttention(nn.Module):
         self.ProjectionLayer = Convolution(HiddenChannels, InputChannels, KernelSize=1, Centered=True)
         self.Heads = HiddenChannels // ChannelsPerHead
 
-    def forward(self, x, w, InputGain, ResidualGain, BiasGain):
-        QKVLayer = lambda y: self.QKVLayer(y, w, Gain=InputGain.view(1, -1, 1, 1), BiasGain=BiasGain)
+    def forward(self, x, w, InputGain, ResidualGain):
+        QKVLayer = lambda y: self.QKVLayer(y, w, Gain=InputGain.view(1, -1, 1, 1))
         ProjectionLayer = lambda y: self.ProjectionLayer(y, Gain=ResidualGain.view(-1, 1, 1, 1))
         
         return x + CosineAttention(x, self.Heads, QKVLayer, ProjectionLayer)
@@ -27,8 +27,8 @@ class FeedForwardNetwork(nn.Module):
         self.LinearLayer3 = Convolution(HiddenChannels, InputChannels, KernelSize=1, Centered=True)
         self.NonLinearity = LeakyReLU()
         
-    def forward(self, x, w, InputGain, ResidualGain, BiasGain):
-        y = self.LinearLayer1(x, w, Gain=InputGain.view(1, -1, 1, 1), BiasGain=BiasGain)
+    def forward(self, x, w, InputGain, ResidualGain):
+        y = self.LinearLayer1(x, w, Gain=InputGain.view(1, -1, 1, 1))
         y = self.LinearLayer2(self.NonLinearity(y))
         y = self.LinearLayer3(self.NonLinearity(y), Gain=ResidualGain.view(-1, 1, 1, 1))
         
@@ -45,7 +45,7 @@ class ResidualGroup(nn.Module):
         AccumulatedVariance = torch.ones([]).to(x.device)
         for ParametrizedAlpha, Layer in zip(self.ParametrizedAlphas, self.Layers):
             Alpha = ParametrizedAlpha()
-            x = Layer(x, w, InputGain=torch.rsqrt(AccumulatedVariance) / math.sqrt(len(self.Layers)), ResidualGain=Alpha, BiasGain=1 / math.sqrt(len(self.Layers)))
+            x = Layer(x, w, InputGain=torch.rsqrt(AccumulatedVariance), ResidualGain=Alpha)
             AccumulatedVariance = AccumulatedVariance + Alpha * Alpha
         
         return x, AccumulatedVariance

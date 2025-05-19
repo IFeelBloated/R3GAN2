@@ -88,10 +88,10 @@ class BiasedPointwiseConvolutionWithModulation(nn.Module):
             self.EmbeddingLayer = Linear(EmbeddingDimension, InputChannels, Centered)
             self.EmbeddingGain = nn.Parameter(torch.zeros([]))
         
-    def forward(self, x, c, Gain=1, BiasGain=1):
+    def forward(self, x, c, Gain=1):
         w = self.Weight()
         w = w / math.sqrt(w[0].numel())
-        b = w[:, -1, :, :].view(-1) * BiasGain
+        b = w[:, -1, :, :].view(-1)
         w = w[:, :-1, :, :] * Gain
         if hasattr(self, 'EmbeddingLayer'):
             c = self.EmbeddingLayer(c, Gain=self.EmbeddingGain) + 1
