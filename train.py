@@ -258,6 +258,7 @@ def main(**kwargs):
     c.G_kwargs.ModulationDimension = WidthPerStage[0]
     c.G_kwargs.WidthPerStage = WidthPerStage
     c.G_kwargs.BlocksPerStage = BlocksPerStage
+    c.G_kwargs.MLPWidthRatio = 2
     c.G_kwargs.FFNWidthRatio = 2
     c.G_kwargs.ChannelsPerConvolutionGroup = 32
     c.G_kwargs.AttentionWidthRatio = 1
@@ -266,6 +267,7 @@ def main(**kwargs):
     c.D_kwargs.ModulationDimension = WidthPerStage[0] if opts.cond else None
     c.D_kwargs.WidthPerStage = [*reversed(WidthPerStage)]
     c.D_kwargs.BlocksPerStage = [*reversed(BlocksPerStage)]
+    c.D_kwargs.MLPWidthRatio = 2
     c.D_kwargs.FFNWidthRatio = 2
     c.D_kwargs.ChannelsPerConvolutionGroup = 32
     c.D_kwargs.AttentionWidthRatio = 1

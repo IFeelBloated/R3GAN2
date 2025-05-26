@@ -98,18 +98,18 @@ class BiasedPointwiseConvolutionWithModulation(nn.Module):
             x = x * c.view(c.shape[0], -1, 1, 1).to(x.dtype)
         return nn.functional.conv2d(x, w.to(x.dtype), b.to(x.dtype))
     
-class SpatialExtentCreator(nn.Module):
+class GenerativeBasis(nn.Module):
     def __init__(self, OutputChannels):
-        super(SpatialExtentCreator, self).__init__()
+        super(GenerativeBasis, self).__init__()
         
         self.Basis = NormalizedWeight(1, OutputChannels, 1, [8, 8], False)
         
     def forward(self, x):
         return self.Basis().view(1, -1, 8, 8) * x.view(x.shape[0], -1, 1, 1)
     
-class SpatialExtentRemover(nn.Module):
+class DiscriminativeBasis(nn.Module):
     def __init__(self, InputChannels):
-        super(SpatialExtentRemover, self).__init__()
+        super(DiscriminativeBasis, self).__init__()
         
         self.Basis = WeightNormalizedConvolution(InputChannels, InputChannels, InputChannels, False, [8, 8], False)
         
@@ -120,7 +120,7 @@ class ClassEmbedder(nn.Module):
     def __init__(self, NumberOfClasses, EmbeddingDimension):
         super(ClassEmbedder, self).__init__()
         
-        self.Weight = NormalizedWeight(EmbeddingDimension, NumberOfClasses, 1, [], False)
+        self.Weight = NormalizedWeight(EmbeddingDimension, NumberOfClasses, 1, [], True)
     
     def forward(self, x):
         return x @ self.Weight().to(x.dtype)

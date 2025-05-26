@@ -2,7 +2,7 @@ import math
 import torch
 import torch.nn as nn
 from .Resamplers import InterpolativeUpsampler, InterpolativeDownsampler, InplaceUpsampler, InplaceDownsampler
-from .MagnitudePreservingLayers import LeakyReLU, Convolution, Linear, BiasedPointwiseConvolutionWithModulation, CosineAttention, SpatialExtentCreator, SpatialExtentRemover, BoundedParameter, ClassEmbedder
+from .MagnitudePreservingLayers import LeakyReLU, Convolution, Linear, BiasedPointwiseConvolutionWithModulation, CosineAttention, GenerativeBasis, DiscriminativeBasis, BoundedParameter, ClassEmbedder
 
 class MultiHeadSelfAttention(nn.Module):
     def __init__(self, InputChannels, HiddenChannels, EmbeddingDimension, ChannelsPerHead):
@@ -90,25 +90,40 @@ class DownsampleLayer(nn.Module):
         else:
             return x.view(x.shape[0], -1, self.ReductionRate, x.shape[2], x.shape[3]).mean(dim=2)
     
-class GenerativeBasis(nn.Module):
-    def __init__(self, InputDimension, OutputChannels):
-        super(GenerativeBasis, self).__init__()
+class MultiLayerPerceptron(nn.Module):
+    def __init__(self, InputDimension, OutputDimension, HiddenDimension, ActivateOutput):
+        super(MultiLayerPerceptron, self).__init__()
         
-        self.Basis = SpatialExtentCreator(OutputChannels)
-        self.LinearLayer = Linear(InputDimension, OutputChannels)
+        self.ActivateOutput = ActivateOutput
+        
+        self.LinearLayer1 = Linear(InputDimension, HiddenDimension, Centered=True)
+        self.LinearLayer2 = Linear(HiddenDimension, OutputDimension, Centered=True)
+        self.NonLinearity = LeakyReLU()
         
     def forward(self, x):
-        return self.Basis(self.LinearLayer(x))
-    
-class DiscriminativeBasis(nn.Module):
-    def __init__(self, InputChannels, OutputDimension):
-        super(DiscriminativeBasis, self).__init__()
+        x = self.LinearLayer2(self.NonLinearity(self.LinearLayer1(x)))
         
-        self.Basis = SpatialExtentRemover(InputChannels)
-        self.LinearLayer = Linear(InputChannels, OutputDimension)
+        return self.NonLinearity(x) if self.ActivateOutput else x
+    
+class GenerativeHead(nn.Module):
+    def __init__(self, InputDimension, OutputChannels, HiddenDimension):
+        super(GenerativeHead, self).__init__()
+        
+        self.Basis = GenerativeBasis(OutputChannels)
+        self.FullyConnectedLayer = MultiLayerPerceptron(InputDimension, OutputChannels, HiddenDimension, False)
+        
+    def forward(self, x):
+        return self.Basis(self.FullyConnectedLayer(x))
+    
+class DiscriminativeHead(nn.Module):
+    def __init__(self, InputChannels, OutputDimension, HiddenDimension):
+        super(DiscriminativeHead, self).__init__()
+        
+        self.Basis = DiscriminativeBasis(InputChannels)
+        self.FullyConnectedLayer = MultiLayerPerceptron(InputChannels, OutputDimension, HiddenDimension, False)
         
     def forward(self, x, Gain):
-        return self.LinearLayer(self.Basis(x, Gain=Gain.view(-1, 1, 1, 1)))
+        return self.FullyConnectedLayer(self.Basis(x, Gain=Gain.view(-1, 1, 1, 1)))
     
 def BuildResidualGroups(WidthPerStage, BlocksPerStage, EmbeddingDimension, FFNWidthRatio, ChannelsPerConvolutionGroup, KernelSize, AttentionWidthRatio, ChannelsPerAttentionHead):
     ResidualGroups = []
@@ -122,29 +137,18 @@ def BuildResidualGroups(WidthPerStage, BlocksPerStage, EmbeddingDimension, FFNWi
         ResidualGroups += [ResidualGroup(Width, BlockConstructors)]
     return ResidualGroups
     
-class MultiLayerPerceptron(nn.Module):
-    def __init__(self, InputDimension, OutputDimension, HiddenDimension):
-        super(MultiLayerPerceptron, self).__init__()
-        
-        self.LinearLayer1 = Linear(InputDimension, HiddenDimension, Centered=True)
-        self.LinearLayer2 = Linear(HiddenDimension, OutputDimension, Centered=True)
-        self.NonLinearity = LeakyReLU()
-        
-    def forward(self, x):
-        return self.NonLinearity(self.LinearLayer2(self.NonLinearity(self.LinearLayer1(x))))
-
 class Generator(nn.Module):
-    def __init__(self, NoiseDimension, ModulationDimension, WidthPerStage, BlocksPerStage, FFNWidthRatio, ChannelsPerConvolutionGroup, AttentionWidthRatio, ChannelsPerAttentionHead, NumberOfClasses=None, ClassEmbeddingDimension=0, KernelSize=3, ResamplingFilter=[1, 2, 1]):
+    def __init__(self, NoiseDimension, ModulationDimension, WidthPerStage, BlocksPerStage, MLPWidthRatio, FFNWidthRatio, ChannelsPerConvolutionGroup, AttentionWidthRatio, ChannelsPerAttentionHead, NumberOfClasses=None, ClassEmbeddingDimension=0, KernelSize=3, ResamplingFilter=[1, 2, 1]):
         super(Generator, self).__init__()
         
         self.MainLayers = nn.ModuleList(BuildResidualGroups(WidthPerStage, BlocksPerStage, ModulationDimension, FFNWidthRatio, ChannelsPerConvolutionGroup, KernelSize, AttentionWidthRatio, ChannelsPerAttentionHead))
         self.TransitionLayers = nn.ModuleList([UpsampleLayer(WidthPerStage[x], WidthPerStage[x + 1], ResamplingFilter) for x in range(len(WidthPerStage) - 1)])
         
-        self.BasisLayer = GenerativeBasis(NoiseDimension + ClassEmbeddingDimension, WidthPerStage[0])
+        self.Head = GenerativeHead(NoiseDimension + ClassEmbeddingDimension, WidthPerStage[0], WidthPerStage[0] * MLPWidthRatio)
         self.AggregationLayer = Convolution(WidthPerStage[-1], 3, KernelSize=1)
         self.Gain = nn.Parameter(torch.ones([]))
         
-        self.MappingLayer = MultiLayerPerceptron(NoiseDimension + ClassEmbeddingDimension, ModulationDimension, ModulationDimension)
+        self.MappingLayer = MultiLayerPerceptron(NoiseDimension + ClassEmbeddingDimension, ModulationDimension, ModulationDimension * MLPWidthRatio, True)
         
         if NumberOfClasses is not None:
             self.EmbeddingLayer = ClassEmbedder(NumberOfClasses, ClassEmbeddingDimension)
@@ -152,7 +156,7 @@ class Generator(nn.Module):
     def forward(self, x, y=None):
         x = torch.cat([x, self.EmbeddingLayer(y)], dim=1) if hasattr(self, 'EmbeddingLayer') else x
         w = self.MappingLayer(x)
-        x = self.BasisLayer(x).to(torch.bfloat16)
+        x = self.Head(x).to(torch.bfloat16)
         
         for Layer, Transition in zip(self.MainLayers[:-1], self.TransitionLayers):
             x, AccumulatedVariance = Layer(x, w)
@@ -162,18 +166,18 @@ class Generator(nn.Module):
         return self.AggregationLayer(x, Gain=self.Gain * torch.rsqrt(AccumulatedVariance).view(1, -1, 1, 1))
 
 class Discriminator(nn.Module):
-    def __init__(self, ModulationDimension, WidthPerStage, BlocksPerStage, FFNWidthRatio, ChannelsPerConvolutionGroup, AttentionWidthRatio, ChannelsPerAttentionHead, NumberOfClasses=None, ClassEmbeddingDimension=0, KernelSize=3, ResamplingFilter=[1, 2, 1]):
+    def __init__(self, ModulationDimension, WidthPerStage, BlocksPerStage, MLPWidthRatio, FFNWidthRatio, ChannelsPerConvolutionGroup, AttentionWidthRatio, ChannelsPerAttentionHead, NumberOfClasses=None, ClassEmbeddingDimension=0, KernelSize=3, ResamplingFilter=[1, 2, 1]):
         super(Discriminator, self).__init__()
         
         self.MainLayers = nn.ModuleList(BuildResidualGroups(WidthPerStage, BlocksPerStage, ModulationDimension, FFNWidthRatio, ChannelsPerConvolutionGroup, KernelSize, AttentionWidthRatio, ChannelsPerAttentionHead))
         self.TransitionLayers = nn.ModuleList([DownsampleLayer(WidthPerStage[x], WidthPerStage[x + 1], ResamplingFilter) for x in range(len(WidthPerStage) - 1)])
         
-        self.BasisLayer = DiscriminativeBasis(WidthPerStage[-1], 1 if NumberOfClasses is None else ClassEmbeddingDimension)
+        self.Head = DiscriminativeHead(WidthPerStage[-1], 1 if NumberOfClasses is None else ClassEmbeddingDimension, WidthPerStage[-1] * MLPWidthRatio)
         self.ExtractionLayer = Convolution(3, WidthPerStage[0], KernelSize=1)
         
         if NumberOfClasses is not None:
             self.EmbeddingLayer = ClassEmbedder(NumberOfClasses, ClassEmbeddingDimension)
-            self.MappingLayer = MultiLayerPerceptron(ClassEmbeddingDimension, ModulationDimension, ModulationDimension)
+            self.MappingLayer = MultiLayerPerceptron(ClassEmbeddingDimension, ModulationDimension, ModulationDimension * MLPWidthRatio, True)
         
     def forward(self, x, y=None):
         if hasattr(self, 'EmbeddingLayer'):
@@ -188,7 +192,7 @@ class Discriminator(nn.Module):
             x = Transition(x, Gain=torch.rsqrt(AccumulatedVariance))
         x, AccumulatedVariance = self.MainLayers[-1](x, w)
         
-        x = self.BasisLayer(x.to(torch.float32), Gain=torch.rsqrt(AccumulatedVariance))
+        x = self.Head(x.to(torch.float32), Gain=torch.rsqrt(AccumulatedVariance))
         x = (x * y / math.sqrt(y.shape[1])).sum(dim=1, keepdim=True) if hasattr(self, 'EmbeddingLayer') else x
         
         return x.view(x.shape[0])
