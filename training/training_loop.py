@@ -179,7 +179,7 @@ def training_loop(
     G = dnnlib.util.construct_class_by_name(**G_kwargs, **common_kwargs).train().requires_grad_(False).to(device) # subclass of torch.nn.Module
     D = dnnlib.util.construct_class_by_name(**D_kwargs, **common_kwargs).train().requires_grad_(False).to(device) # subclass of torch.nn.Module
     ema = dnnlib.util.construct_class_by_name(net=G, **ema_kwargs)
-    ema_preview = ema.emas[1]
+    ema_preview = ema.emas[0]
 
     # Resume from existing pickle.
     if resume_pkl is not None:

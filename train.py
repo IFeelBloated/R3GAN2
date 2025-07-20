@@ -176,8 +176,8 @@ def main(**kwargs):
     c.d_batch_gpu = opts.d_batch_gpu or opts.batch // opts.gpus
     
     if opts.preset == 'CIFAR10':
-        WidthPerStage = [3 * x // 4 for x in [1024, 1024, 1024]]
-        BlocksPerStage = [['FFN', 'FFN'], ['FFN', 'FFN'], ['FFN', 'FFN']]
+        WidthPerStage = [x // 2 for x in [1024, 1024, 1024]]
+        BlocksPerStage = [['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN']]
         NoiseDimension = 64
        
         c.G_kwargs.ClassEmbeddingDimension = NoiseDimension
@@ -191,8 +191,8 @@ def main(**kwargs):
         c.beta2_scheduler = { 'base_value': 0.9, 'final_value': 0.99, 'total_nimg': decay_nimg }
 
     if opts.preset == 'FFHQ-64':
-        WidthPerStage = [3 * x // 4 for x in [1024, 1024, 1024, 1024]]
-        BlocksPerStage = [['FFN', 'FFN'], ['FFN', 'FFN'], ['FFN', 'FFN'], ['FFN', 'FFN']]
+        WidthPerStage = [x // 2 for x in [1024, 1024, 1024, 1024]]
+        BlocksPerStage = [['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN']]
         NoiseDimension = 64
        
         decay_nimg = 2e7
@@ -203,8 +203,8 @@ def main(**kwargs):
         c.beta2_scheduler = { 'base_value': 0.9, 'final_value': 0.99, 'total_nimg': decay_nimg }
 
     if opts.preset == 'FFHQ-256':
-        WidthPerStage = [3 * x // 4 for x in [1024, 1024, 1024, 1024, 512, 256]]
-        BlocksPerStage = [['FFN', 'FFN'], ['FFN', 'FFN'], ['FFN', 'FFN'], ['FFN', 'FFN'], ['FFN', 'FFN'], ['FFN', 'FFN']]
+        WidthPerStage = [x // 2 for x in [1024, 1024, 1024, 1024, 512, 256]]
+        BlocksPerStage = [['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN']]
         NoiseDimension = 64
        
         decay_nimg = 2e7
@@ -215,8 +215,8 @@ def main(**kwargs):
         c.beta2_scheduler = { 'base_value': 0.9, 'final_value': 0.99, 'total_nimg': decay_nimg }
 
     if opts.preset == 'ImageNet-32':
-        WidthPerStage = [6 * x // 4 for x in [1024, 1024, 1024]]
-        BlocksPerStage = [['FFN', 'FFN'], ['FFN', 'FFN'], ['FFN', 'FFN']]
+        WidthPerStage = [x for x in [1024, 1024, 1024]]
+        BlocksPerStage = [['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN']]
         NoiseDimension = 64
        
         c.G_kwargs.ClassEmbeddingDimension = NoiseDimension
@@ -230,8 +230,8 @@ def main(**kwargs):
         c.beta2_scheduler = { 'base_value': 0.9, 'final_value': 0.99, 'total_nimg': decay_nimg }
 
     if opts.preset == 'ImageNet-64':
-        WidthPerStage = [6 * x // 4 for x in [1024, 1024, 1024, 1024]]
-        BlocksPerStage = [['FFN', 'FFN'], ['FFN', 'FFN'], ['FFN', 'FFN'], ['FFN', 'FFN']]
+        WidthPerStage = [x for x in [1024, 1024, 1024, 1024]]
+        BlocksPerStage = [['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN']]
         NoiseDimension = 64
         
         c.G_kwargs.ClassEmbeddingDimension = NoiseDimension
