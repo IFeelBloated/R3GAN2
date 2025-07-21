@@ -235,9 +235,8 @@ def compute_feature_stats_for_dataset(opts, detector_url, detector_kwargs, rel_l
         stats.append_torch(features, num_gpus=opts.num_gpus, rank=opts.rank)
         progress.update(stats.num_items)
 
-    local_world_size = int(os.environ.get('LOCAL_WORLD_SIZE', torch.cuda.device_count()))
     # Save to cache.
-    if cache_file is not None and (opts.rank % local_world_size == 0):
+    if cache_file is not None and opts.rank == 0:
         os.makedirs(os.path.dirname(cache_file), exist_ok=True)
         temp_file = cache_file + '.' + uuid.uuid4().hex
         stats.save(temp_file)
