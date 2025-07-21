@@ -13,6 +13,8 @@ import torch
 import warnings
 import dnnlib
 
+import fsspec
+
 #----------------------------------------------------------------------------
 # Cached construction of constant tensors. Avoids CPU=>GPU copy when the
 # same constant is used multiple times.
@@ -99,7 +101,7 @@ class InfiniteSampler(torch.utils.data.Sampler):
         assert num_replicas > 0
         assert 0 <= rank < num_replicas
         assert 0 <= window_size <= 1
-        super().__init__(None)
+        super().__init__(dataset)
         self.dataset = dataset
         self.rank = rank
         self.num_replicas = num_replicas
@@ -247,3 +249,8 @@ def print_module_summary(module, inputs, max_nesting=3, skip_redundant=True):
     return outputs
 
 #----------------------------------------------------------------------------
+
+def fsspec_exists(fname):
+    fs = fsspec.core.url_to_fs(fname)
+    return fs.exists(fname)
+    #fsspec.exists(fname)
