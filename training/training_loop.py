@@ -167,9 +167,6 @@ def training_loop(
     
     if ema_snapshot_ticks is None:
         ema_snapshot_ticks = network_snapshot_ticks
-        
-    os.mkdir(os.path.join(run_dir, 'ema'))
-    os.mkdir(os.path.join(run_dir, 'snapshots'))
 
     # Load training set.
     if rank == 0:
@@ -436,7 +433,7 @@ def training_loop(
                 fname = f'ema-snapshot-{cur_nimg//1000:09d}{ema_suffix}.pkl'
                 if rank == 0:
                     print(f'Saving {fname} ... ', end='', flush=True)
-                    with open(os.path.join(run_dir, 'ema', fname), 'wb') as f:
+                    with fsspec.open(os.path.join(run_dir, 'ema', fname), 'wb', auto_mkdir=True) as f:
                         pickle.dump(data, f)
                     print('done')
                 del data # conserve memory
@@ -459,7 +456,7 @@ def training_loop(
                 del value # conserve memory
             snapshot_pkl = os.path.join(run_dir, 'snapshots', f'network-snapshot-{cur_nimg//1000:09d}.pkl')
             if rank == 0:
-                with fsspec.open(snapshot_pkl, 'wb') as f:
+                with fsspec.open(snapshot_pkl, 'wb', auto_mkdir=True) as f:
                     pickle.dump(snapshot_data, f)
                 # if stats_jsonl is not None:
                 #     stats_jsonl.flush()
