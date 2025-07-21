@@ -162,8 +162,9 @@ def training_loop(
     if ema_snapshot_ticks is None:
         ema_snapshot_ticks = network_snapshot_ticks
         
-    os.mkdir(os.path.join(run_dir, 'ema'))
-    os.mkdir(os.path.join(run_dir, 'snapshots'))
+    if rank == 0:
+        os.mkdir(os.path.join(run_dir, 'ema'))
+        os.mkdir(os.path.join(run_dir, 'snapshots'))
 
     # Load training set.
     if rank == 0:
