@@ -142,6 +142,7 @@ def training_loop(
     kimg_per_tick           = 4,        # Progress snapshot interval.
     image_snapshot_ticks    = 50,       # How often to save image snapshots? None = disable.
     network_snapshot_ticks  = 50,       # How often to save network snapshots? None = disable.
+    ema_snapshot_ticks      = None,
     resume_pkl              = None,     # Network pickle to resume training from.
     cudnn_benchmark         = True,     # Enable torch.backends.cudnn.benchmark?
     abort_fn                = None,     # Callback function for determining whether to abort training. Must return consistent results across ranks.
@@ -157,6 +158,12 @@ def training_loop(
     torch.backends.cudnn.allow_tf32 = False             # Improves numerical accuracy.
     conv2d_gradfix.enabled = True                       # Improves training speed.
     grid_sample_gradfix.enabled = True                  # Avoids errors with the augmentation pipe.
+    
+    if ema_snapshot_ticks is None:
+        ema_snapshot_ticks = network_snapshot_ticks
+        
+    os.mkdir(os.path.join(run_dir, 'ema'))
+    os.mkdir(os.path.join(run_dir, 'snapshots'))
 
     # Load training set.
     if rank == 0:
@@ -410,6 +417,20 @@ def training_loop(
                         training_stats.report('MagnitudeD/avg/' + str(x.shape[2]), CollectMagnitude(x, 'avg'))
                         training_stats.report('MagnitudeD/max/' + str(x.shape[2]), CollectMagnitude(x, 'max'))
         
+        if (ema_snapshot_ticks is not None) and (done or cur_tick % ema_snapshot_ticks == 0):
+            ema_list = ema.get()
+            ema_list = ema_list if isinstance(ema_list, list) else [(ema_list, '')]
+            for ema_net, ema_suffix in ema_list:
+                data = dnnlib.EasyDict(training_set_kwargs=dict(training_set_kwargs))
+                data.ema = copy.deepcopy(ema_net).cpu().eval().requires_grad_(False)
+                fname = f'ema-snapshot-{cur_nimg//1000:09d}{ema_suffix}.pkl'
+                if rank == 0:
+                    print(f'Saving {fname} ... ', end='', flush=True)
+                    with open(os.path.join(run_dir, 'ema', fname), 'wb') as f:
+                        pickle.dump(data, f)
+                    print('done')
+                del data # conserve memory
+        
         # Save network snapshot.
         snapshot_pkl = None
         snapshot_data = None
@@ -426,7 +447,7 @@ def training_loop(
                             torch.distributed.broadcast(param, src=0)
                     snapshot_data[key] = value.cpu()
                 del value # conserve memory
-            snapshot_pkl = os.path.join(run_dir, f'network-snapshot-{cur_nimg//1000:09d}.pkl')
+            snapshot_pkl = os.path.join(run_dir, 'snapshots', f'network-snapshot-{cur_nimg//1000:09d}.pkl')
             if rank == 0:
                 with open(snapshot_pkl, 'wb') as f:
                     pickle.dump(snapshot_data, f)
