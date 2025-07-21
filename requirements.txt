@@ -1,0 +1,10 @@
+torch
+torchvision
+fsspec
+gdown
+click
+psutil
+setuptools
+tensorflow_io[tensorflow-cpu]
+s3fs
+scipy

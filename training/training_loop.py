@@ -14,6 +14,7 @@ import copy
 import json
 import pickle
 import psutil
+import fsspec
 import PIL.Image
 import numpy as np
 import torch
@@ -92,10 +93,11 @@ def save_image_grid(img, fname, drange, grid_size):
     img = img.reshape([gh * H, gw * W, C])
 
     assert C in [1, 3]
-    if C == 1:
-        PIL.Image.fromarray(img[:, :, 0], 'L').save(fname)
-    if C == 3:
-        PIL.Image.fromarray(img, 'RGB').save(fname)
+    with fsspec.open(fname, 'wb') as f:
+        if C == 1:
+            PIL.Image.fromarray(img[:, :, 0], 'L').save(f, format='PNG')
+        if C == 3:
+            PIL.Image.fromarray(img, 'RGB').save(f, format='PNG')
 
 #----------------------------------------------------------------------------
 
@@ -139,7 +141,7 @@ def training_loop(
     d_batch_gpu             = 4,        # Number of samples processed at a time by one GPU.
     aug_scheduler           = None,
     total_kimg              = 25000,    # Total length of the training, measured in thousands of real images.
-    kimg_per_tick           = 4,        # Progress snapshot interval.
+    kimg_per_tick           = 40,        # Progress snapshot interval.
     image_snapshot_ticks    = 50,       # How often to save image snapshots? None = disable.
     network_snapshot_ticks  = 50,       # How often to save network snapshots? None = disable.
     ema_snapshot_ticks      = None,
@@ -150,7 +152,11 @@ def training_loop(
 ):
     # Initialize.
     start_time = time.time()
-    device = torch.device('cuda', rank)
+    rank = torch.distributed.get_rank()
+    local_world_size = int(os.environ.get("LOCAL_WORLD_SIZE", "1"))
+    world_size = torch.distributed.get_world_size()
+    device = torch.device('cuda', rank % local_world_size)
+    assert num_gpus == world_size
     np.random.seed(random_seed * num_gpus + rank)
     torch.manual_seed(random_seed * num_gpus + rank)
     torch.backends.cudnn.benchmark = cudnn_benchmark    # Improves training speed.
@@ -190,7 +196,8 @@ def training_loop(
 
     # Resume from existing pickle.
     if resume_pkl is not None:
-        with dnnlib.util.open_url(resume_pkl) as f:
+        #with dnnlib.util.open_url(resume_pkl) as f:
+        with fsspec.open(resume_pkl) as f:
             resume_data = legacy.load_network_pkl(f)
         if rank == 0:
             print(f'Resuming from "{resume_pkl}"')
@@ -212,7 +219,7 @@ def training_loop(
 
     if (augment_kwargs is not None) and (aug_scheduler is not None):
         augment_pipe = dnnlib.util.construct_class_by_name(**augment_kwargs).train().requires_grad_(False).to(device) # subclass of torch.nn.Module
-        
+
     # Distribute across GPUs.
     if rank == 0:
         print(f'Distributing across {num_gpus} GPUs...')
@@ -265,8 +272,11 @@ def training_loop(
     stats_jsonl = None
     stats_tfevents = None
     if rank == 0:
-        stats_jsonl = open(os.path.join(run_dir, 'stats.jsonl'), 'wt')
+        # TODO (Binary append mode is support apparently)
+        #stats_jsonl = fsspec.open(os.path.join(run_dir, 'stats.jsonl'), 'ab').open()
+        #stats_jsonl = None # TODO fix.
         try:
+            import tensorflow_io
             import torch.utils.tensorboard as tensorboard
             stats_tfevents = tensorboard.SummaryWriter(run_dir)
         except ImportError as err:
@@ -393,7 +403,7 @@ def training_loop(
         training_stats.report0('Timing/total_hours', (tick_end_time - start_time) / (60 * 60))
         training_stats.report0('Timing/total_days', (tick_end_time - start_time) / (24 * 60 * 60))
         if rank == 0:
-            print(' '.join(fields))
+            print(' '.join(fields), flush=True)
 
         # Check for abort.
         if (not done) and (abort_fn is not None) and abort_fn():
@@ -449,8 +459,12 @@ def training_loop(
                 del value # conserve memory
             snapshot_pkl = os.path.join(run_dir, 'snapshots', f'network-snapshot-{cur_nimg//1000:09d}.pkl')
             if rank == 0:
-                with open(snapshot_pkl, 'wb') as f:
+                with fsspec.open(snapshot_pkl, 'wb') as f:
                     pickle.dump(snapshot_data, f)
+                # if stats_jsonl is not None:
+                #     stats_jsonl.flush()
+                # if stats_tfevents is not None:
+                #     stats_tfevents.flush()
 
         # Evaluate metrics.
         if (snapshot_data is not None) and (len(metrics) > 0):
@@ -478,8 +492,15 @@ def training_loop(
         timestamp = time.time()
         if stats_jsonl is not None:
             fields = dict(stats_dict, timestamp=timestamp)
-            stats_jsonl.write(json.dumps(fields) + '\n')
-            stats_jsonl.flush()
+            with fsspec.open(os.path.join(run_dir, 'stats.jsonl'), 'a') as f:
+                f.write(json.dumps(fields) + '\n')
+                # try:
+                #     f.flush()
+                # except AttributeError:
+                #     pass # workaround for S3FS bug
+                #f.flush()
+            #stats_jsonl.write(json.dumps(fields) + '\n')
+            #stats_jsonl.flush()
         if stats_tfevents is not None:
             global_step = int(cur_nimg / 1e3)
             walltime = timestamp - start_time
@@ -487,7 +508,10 @@ def training_loop(
                 stats_tfevents.add_scalar(name, value.mean, global_step=global_step, walltime=walltime)
             for name, value in stats_metrics.items():
                 stats_tfevents.add_scalar(f'Metrics/{name}', value, global_step=global_step, walltime=walltime)
+            #try:
             stats_tfevents.flush()
+            #except AttributeError:
+            #    pass
         if progress_fn is not None:
             progress_fn(cur_nimg // 1000, total_kimg)
 
@@ -501,6 +525,8 @@ def training_loop(
 
     # Done.
     if rank == 0:
+        #stats_jsonl.close()
+        stats_tfevents.close()
         print()
         print('Exiting...')
 
