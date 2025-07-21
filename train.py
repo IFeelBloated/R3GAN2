@@ -255,105 +255,99 @@ def main(**kwargs):
     print(f"{beta2=}")
 
     if opts.preset == 'CIFAR10':
-        WidthPerStage = [3 * x // 4 for x in [1024, 1024, 1024, 1024]]
-        BlocksPerStage = [['FFN', 'FFN'], ['FFN', 'FFN'], ['FFN', 'FFN'], ['FFN', 'FFN']]
+        WidthPerStage = [x // 2 for x in [1024, 1024, 1024]]
+        BlocksPerStage = [['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN']]
         NoiseDimension = 64
        
         if gammas is None:
             gammas = (0.05, 0.005)
-
-        c.G_kwargs.ConditionEmbeddingDimension = NoiseDimension
-        c.D_kwargs.ConditionEmbeddingDimension = WidthPerStage[0]
+      
+        c.G_kwargs.ClassEmbeddingDimension = NoiseDimension
+        c.D_kwargs.ClassEmbeddingDimension = WidthPerStage[0]
        
-        ema_nimg = 5000 * 1000
         decay_nimg = 2e7
        
-        c.ema_scheduler = { 'base_value': 0, 'final_value': ema_nimg, 'total_nimg': decay_nimg }
         c.aug_scheduler = { 'base_value': 0, 'final_value': 0.55, 'total_nimg': decay_nimg }
-        c.lr_scheduler = { 'base_value': 1e-2, 'final_value': 2.5e-3, 'total_nimg': decay_nimg }
+        c.lr_scheduler = { 'base_value': 1e-2, 'final_value': 1e-3, 'total_nimg': decay_nimg }
         c.gamma_scheduler = { 'base_value': gammas[0], 'final_value': gammas[1], 'total_nimg': decay_nimg }
         c.beta2_scheduler = { 'base_value': 0.9, 'final_value': 0.99, 'total_nimg': decay_nimg }
 
     if opts.preset == 'FFHQ-64':
-        WidthPerStage = [3 * x // 4 for x in [1024, 1024, 1024, 1024, 512]]
-        BlocksPerStage = [['FFN', 'FFN'], ['FFN', 'FFN'], ['FFN', 'FFN'], ['FFN', 'FFN'], ['FFN', 'FFN']]
+        WidthPerStage = [x // 2 for x in [1024, 1024, 1024, 1024]]
+        BlocksPerStage = [['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN']]
         NoiseDimension = 64
 
         assert gammas is None
        
-        ema_nimg = 500 * 1000
         decay_nimg = 2e7
        
-        c.ema_scheduler = { 'base_value': 0, 'final_value': ema_nimg, 'total_nimg': decay_nimg }
         c.aug_scheduler = { 'base_value': 0, 'final_value': 0.3, 'total_nimg': decay_nimg }
-        c.lr_scheduler = { 'base_value': 1e-2, 'final_value': 2.5e-3, 'total_nimg': decay_nimg }
+        c.lr_scheduler = { 'base_value': 1e-2, 'final_value': 1e-3, 'total_nimg': decay_nimg }
         c.gamma_scheduler = { 'base_value': 2, 'final_value': 0.2, 'total_nimg': decay_nimg }
         c.beta2_scheduler = { 'base_value': 0.9, 'final_value': 0.99, 'total_nimg': decay_nimg }
 
     if opts.preset == 'FFHQ-256':
-        WidthPerStage = [3 * x // 4 for x in [1024, 1024, 1024, 1024, 512, 256, 128]]
-        BlocksPerStage = [['FFN', 'FFN'], ['FFN', 'FFN'], ['FFN', 'FFN'], ['FFN', 'FFN'], ['FFN', 'FFN'], ['FFN', 'FFN'], ['FFN', 'FFN']]
+        WidthPerStage = [x // 2 for x in [1024, 1024, 1024, 1024, 512, 256]]
+        BlocksPerStage = [['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN']]
         NoiseDimension = 64
        
         assert gammas is None
-        
-        ema_nimg = 500 * 1000
+
         decay_nimg = 2e7
        
-        c.ema_scheduler = { 'base_value': 0, 'final_value': ema_nimg, 'total_nimg': decay_nimg }
         c.aug_scheduler = { 'base_value': 0, 'final_value': 0.3, 'total_nimg': decay_nimg }
-        c.lr_scheduler = { 'base_value': 1e-2, 'final_value': 2.5e-3, 'total_nimg': decay_nimg }
+        c.lr_scheduler = { 'base_value': 1e-2, 'final_value': 1e-3, 'total_nimg': decay_nimg }
         c.gamma_scheduler = { 'base_value': 150, 'final_value': 15, 'total_nimg': decay_nimg }
         c.beta2_scheduler = { 'base_value': 0.9, 'final_value': 0.99, 'total_nimg': decay_nimg }
 
     if opts.preset == 'ImageNet-32':
-        WidthPerStage = [6 * x // 4 for x in [1024, 1024, 1024, 1024]]
-        BlocksPerStage = [['FFN', 'FFN'], ['FFN', 'FFN'], ['FFN', 'FFN'], ['FFN', 'FFN']]
+        WidthPerStage = [x for x in [1024, 1024, 1024]]
+        BlocksPerStage = [['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN']]
         NoiseDimension = 64
 
         assert gammas is None
-
-        c.G_kwargs.ConditionEmbeddingDimension = NoiseDimension
-        c.D_kwargs.ConditionEmbeddingDimension = WidthPerStage[0]
+  
+        c.G_kwargs.ClassEmbeddingDimension = NoiseDimension
+        c.D_kwargs.ClassEmbeddingDimension = WidthPerStage[0]
        
-        ema_nimg = 50000 * 1000
         decay_nimg = 2e8
        
-        c.ema_scheduler = { 'base_value': 0, 'final_value': ema_nimg, 'total_nimg': decay_nimg }
         c.aug_scheduler = { 'base_value': 0, 'final_value': 0.4, 'total_nimg': decay_nimg }
-        c.lr_scheduler = { 'base_value': 1e-2, 'final_value': 2.5e-3, 'total_nimg': decay_nimg }
+        c.lr_scheduler = { 'base_value': 1e-2, 'final_value': 1e-3, 'total_nimg': decay_nimg }
         c.gamma_scheduler = { 'base_value': 0.5, 'final_value': 0.05, 'total_nimg': decay_nimg }
         c.beta2_scheduler = { 'base_value': 0.9, 'final_value': 0.99, 'total_nimg': decay_nimg }
 
     if opts.preset == 'ImageNet-64':
-        WidthPerStage = [6 * x // 4 for x in [1024, 1024, 1024, 1024, 1024]]
-        BlocksPerStage = [['FFN', 'FFN'], ['FFN', 'FFN'], ['FFN', 'FFN'], ['FFN', 'FFN'], ['FFN', 'FFN']]
+        WidthPerStage = [x for x in [1024, 1024, 1024, 1024]]
+        BlocksPerStage = [['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN']]
         NoiseDimension = 64
 
         assert gammas is None
         
-        c.G_kwargs.ConditionEmbeddingDimension = NoiseDimension
-        c.D_kwargs.ConditionEmbeddingDimension = WidthPerStage[0]
+        c.G_kwargs.ClassEmbeddingDimension = NoiseDimension
+        c.D_kwargs.ClassEmbeddingDimension = WidthPerStage[0]
         
-        ema_nimg = 50000 * 1000
         decay_nimg = 2e8
         
-        c.ema_scheduler = { 'base_value': 0, 'final_value': ema_nimg, 'total_nimg': decay_nimg }
         c.aug_scheduler = { 'base_value': 0, 'final_value': 0.4, 'total_nimg': decay_nimg }
-        c.lr_scheduler = { 'base_value': 1e-2, 'final_value': 2.5e-3, 'total_nimg': decay_nimg }
+        c.lr_scheduler = { 'base_value': 1e-2, 'final_value': 1e-3, 'total_nimg': decay_nimg }
         c.gamma_scheduler = { 'base_value': 1, 'final_value': 0.1, 'total_nimg': decay_nimg }
         c.beta2_scheduler = { 'base_value': 0.9, 'final_value': 0.99, 'total_nimg': decay_nimg }
 
     c.G_kwargs.NoiseDimension = NoiseDimension
+    c.G_kwargs.ModulationDimension = WidthPerStage[0]
     c.G_kwargs.WidthPerStage = WidthPerStage
     c.G_kwargs.BlocksPerStage = BlocksPerStage
+    c.G_kwargs.MLPWidthRatio = 2
     c.G_kwargs.FFNWidthRatio = 2
     c.G_kwargs.ChannelsPerConvolutionGroup = 32
     c.G_kwargs.AttentionWidthRatio = 1
     c.G_kwargs.ChannelsPerAttentionHead = 64
     
+    c.D_kwargs.ModulationDimension = WidthPerStage[0] if opts.cond else None
     c.D_kwargs.WidthPerStage = [*reversed(WidthPerStage)]
     c.D_kwargs.BlocksPerStage = [*reversed(BlocksPerStage)]
+    c.D_kwargs.MLPWidthRatio = 2
     c.D_kwargs.FFNWidthRatio = 2
     c.D_kwargs.ChannelsPerConvolutionGroup = 32
     c.D_kwargs.AttentionWidthRatio = 1

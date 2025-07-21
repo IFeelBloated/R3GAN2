@@ -98,7 +98,7 @@ class Dataset(torch.utils.data.Dataset):
         label = self._get_raw_labels()[self._raw_idx[idx]]
         if label.dtype == np.int64:
             onehot = np.zeros(self.label_shape, dtype=np.float32)
-            onehot[label] = np.sqrt(self.label_shape)
+            onehot[label] = 1
             label = onehot
         return label.copy()
 
