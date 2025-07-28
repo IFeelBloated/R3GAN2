@@ -89,7 +89,7 @@ def solve_posthoc_coefficients(in_ofs, in_std, out_ofs, out_std): # => [in, out]
 
 class PowerFunctionEMA:
     @torch.no_grad()
-    def __init__(self, net, stds=[0.010, 0.050]):
+    def __init__(self, net, stds=[0.010, 0.050, 0.100]):
         self.net = net
         self.stds = stds
         self.emas = [copy.deepcopy(net) for _std in stds]

@@ -142,7 +142,7 @@ def training_loop(
     kimg_per_tick           = 4,        # Progress snapshot interval.
     image_snapshot_ticks    = 50,       # How often to save image snapshots? None = disable.
     network_snapshot_ticks  = 50,       # How often to save network snapshots? None = disable.
-    ema_snapshot_ticks      = None,
+    ema_snapshot_ticks      = 50,
     resume_pkl              = None,     # Network pickle to resume training from.
     cudnn_benchmark         = True,     # Enable torch.backends.cudnn.benchmark?
     abort_fn                = None,     # Callback function for determining whether to abort training. Must return consistent results across ranks.
@@ -158,10 +158,7 @@ def training_loop(
     torch.backends.cudnn.allow_tf32 = False             # Improves numerical accuracy.
     conv2d_gradfix.enabled = True                       # Improves training speed.
     grid_sample_gradfix.enabled = True                  # Avoids errors with the augmentation pipe.
-    
-    if ema_snapshot_ticks is None:
-        ema_snapshot_ticks = network_snapshot_ticks
-        
+          
     if rank == 0:
         os.mkdir(os.path.join(run_dir, 'ema'))
         os.mkdir(os.path.join(run_dir, 'snapshots'))
@@ -187,7 +184,7 @@ def training_loop(
     G = dnnlib.util.construct_class_by_name(**G_kwargs, **common_kwargs).train().requires_grad_(False).to(device) # subclass of torch.nn.Module
     D = dnnlib.util.construct_class_by_name(**D_kwargs, **common_kwargs).train().requires_grad_(False).to(device) # subclass of torch.nn.Module
     ema = dnnlib.util.construct_class_by_name(net=G, **ema_kwargs)
-    ema_preview = ema.emas[0]
+    ema_preview = ema.emas[1]
 
     # Resume from existing pickle.
     if resume_pkl is not None:
