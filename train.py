@@ -8,6 +8,7 @@
 
 import os
 import click
+import fsspec
 import re
 import json
 import tempfile
@@ -21,27 +22,85 @@ from torch_utils import custom_ops
 
 #----------------------------------------------------------------------------
 
+def _has_dist_env() -> bool:
+    req = ("RANK", "WORLD_SIZE", "LOCAL_RANK", "MASTER_ADDR", "MASTER_PORT")
+    return all(k in os.environ for k in req)
+
 def subprocess_fn(rank, c, temp_dir):
     dnnlib.util.Logger(file_name=os.path.join(c.run_dir, 'log.txt'), file_mode='a', should_flush=True)
 
     # Init torch.distributed.
+    local_rank=rank
+    num_nodes = int(os.environ.get('NUM_NODES', '1'))
+    node_rank = int(os.environ.get('NODE_RANK', '0'))
+    if (num_nodes > 1) and  "MASTER_ADDR" not in os.environ:
+        raise AssertionError("MASTER_ADDR must be specified")
+    if num_nodes > 1 and  "MASTER_PORT" not in os.environ:
+        raise AssertionError("MASTER_PORT must be specified")
+    master_addr = os.environ.get("MASTER_ADDR")
+    local_world_size = int(os.environ.get('LOCAL_WORLD_SIZE', torch.cuda.device_count()))
+    #os.environ.setdefault("MASTER_ADDR", "127.0.0.1")
+    #os.environ.setdefault("MASTER_PORT", "8888")
+    global_rank = int(os.environ.get('RANK', rank + (node_rank * local_world_size)))
+    print(f"{global_rank=} {local_rank=} {num_nodes=},{master_addr=}")
     if c.num_gpus > 1:
         init_file = os.path.abspath(os.path.join(temp_dir, '.torch_distributed_init'))
         if os.name == 'nt':
             init_method = 'file:///' + init_file.replace('\\', '/')
-            torch.distributed.init_process_group(backend='gloo', init_method=init_method, rank=rank, world_size=c.num_gpus)
+            torch.distributed.init_process_group(backend='gloo', init_method=init_method, 
+                rank=global_rank, world_size=c.num_gpus)
         else:
-            init_method = f'file://{init_file}'
-            torch.distributed.init_process_group(backend='nccl', init_method=init_method, rank=rank, world_size=c.num_gpus)
-
+            #init_method = f'file://{init_file}'
+            torch.distributed.init_process_group(backend='nccl', 
+                #init_method=init_method, 
+                rank=global_rank, world_size=c.num_gpus, device_id=local_rank)
+    
+        torch.distributed.barrier()
+    print("initialized")
     # Init torch_utils.
+    
     sync_device = torch.device('cuda', rank) if c.num_gpus > 1 else None
-    training_stats.init_multiprocessing(rank=rank, sync_device=sync_device)
-    if rank != 0:
+    training_stats.init_multiprocessing(rank=global_rank, sync_device=sync_device)
+    if global_rank != 0:
         custom_ops.verbosity = 'none'
 
     # Execute training loop.
-    training_loop.training_loop(rank=rank, **c)
+    training_loop.training_loop(rank=global_rank, **c)
+
+def load_latest_checkpoint(directory_path):
+    """
+    Load the latest checkpoint from a specified directory using a filename pattern.
+    This function is designed to work with any fsspec-compatible file system.
+
+    Args:
+    directory_path (str): The URLpath to the directory containing the checkpoint files.
+                          It should include the protocol prefix (e.g., 's3://', 'file://').
+
+    Returns:
+    The path of the latest checkpoint file.
+    """
+    # Infer the appropriate filesystem from the given directory_path
+    fs, _, paths = fsspec.get_fs_token_paths(directory_path)
+    
+    directory = paths[0]
+    
+    # Construct a glob pattern for the checkpoint files
+    pattern = os.path.join(directory, "network-snapshot-*.pkl")
+
+    # Use glob to find all files matching the pattern
+    checkpoints = fs.glob(pattern)
+
+    # If no checkpoints are found, return None
+    if not checkpoints:
+        print("No checkpoint files found.")
+        return None
+
+    # Sort the checkpoints to find the latest one
+    # This step assumes that the filenames contain sortable timestamps or indices
+    latest_checkpoint = sorted(checkpoints)[-1]
+
+    # Return the latest checkpoint path
+    return f"{fs.protocol[0]}://{latest_checkpoint}"
 
 #----------------------------------------------------------------------------
 
@@ -49,14 +108,21 @@ def launch_training(c, desc, outdir, dry_run):
     dnnlib.util.Logger(should_flush=True)
 
     # Pick output directory.
-    prev_run_dirs = []
-    if os.path.isdir(outdir):
-        prev_run_dirs = [x for x in os.listdir(outdir) if os.path.isdir(os.path.join(outdir, x))]
-    prev_run_ids = [re.match(r'^\d+', x) for x in prev_run_dirs]
-    prev_run_ids = [int(x.group()) for x in prev_run_ids if x is not None]
-    cur_run_id = max(prev_run_ids, default=-1) + 1
-    c.run_dir = os.path.join(outdir, f'{cur_run_id:05d}-{desc}')
-    assert not os.path.exists(c.run_dir)
+    if not c.no_subdir:
+        prev_run_dirs = []
+        if os.path.isdir(outdir):
+            prev_run_dirs = [x for x in os.listdir(outdir) if os.path.isdir(os.path.join(outdir, x))]
+        prev_run_ids = [re.match(r'^\d+', x) for x in prev_run_dirs]
+        prev_run_ids = [int(x.group()) for x in prev_run_ids if x is not None]
+        cur_run_id = max(prev_run_ids, default=-1) + 1
+        c.run_dir = os.path.join(outdir, f'{cur_run_id:05d}-{desc}')
+        assert not os.path.exists(c.run_dir)
+    else:
+        c.run_dir = outdir
+        c.resume_pkl = load_latest_checkpoint(outdir)
+        print(f'Autoresuming from : {c.resume_pkl}') 
+
+    c.pop('no_subdir') # removes no_subdir
 
     # Print options.
     print()
@@ -81,7 +147,7 @@ def launch_training(c, desc, outdir, dry_run):
 
     # Create output directory.
     print('Creating output directory...')
-    os.makedirs(c.run_dir)
+    os.makedirs(c.run_dir, exist_ok=True)
     with open(os.path.join(c.run_dir, 'training_options.json'), 'wt') as f:
         json.dump(c, f, indent=2)
 
@@ -89,10 +155,20 @@ def launch_training(c, desc, outdir, dry_run):
     print('Launching processes...')
     torch.multiprocessing.set_start_method('spawn')
     with tempfile.TemporaryDirectory() as temp_dir:
-        if c.num_gpus == 1:
-            subprocess_fn(rank=0, c=c, temp_dir=temp_dir)
+        if c.num_gpus != 1 and _has_dist_env():
+            # Slurm started one proc per GPU; just run once
+            local_rank = int(os.environ["LOCAL_RANK"])
+            c.num_gpus = int(os.environ["WORLD_SIZE"])
+            subprocess_fn(rank=local_rank, c=c, temp_dir=temp_dir)
         else:
-            torch.multiprocessing.spawn(fn=subprocess_fn, args=(c, temp_dir), nprocs=c.num_gpus)
+            # single-node fallback: spawn per local GPU
+            local_world_size = torch.cuda.device_count()
+            if c.num_gpus == 1:
+                subprocess_fn(rank=0, c=c, temp_dir=temp_dir)
+            else:
+                torch.multiprocessing.spawn(
+                   fn=subprocess_fn, args=(c, temp_dir), nprocs=local_world_size
+                ) 
 
 #----------------------------------------------------------------------------
 
@@ -149,6 +225,8 @@ def parse_comma_separated_list(s):
 @click.option('--workers',      help='DataLoader worker processes', metavar='INT',              type=click.IntRange(min=1), default=3, show_default=True)
 @click.option('-n','--dry-run', help='Print training options and exit',                         is_flag=True)
 
+@click.option('--no-subdir', is_flag=True, help='Do not create subdirectories')
+
 def main(**kwargs):
     # Initialize config.
     opts = dnnlib.EasyDict(kwargs) # Command line arguments.
@@ -157,8 +235,8 @@ def main(**kwargs):
     c.G_kwargs = dnnlib.EasyDict(class_name='training.networks.Generator')
     c.D_kwargs = dnnlib.EasyDict(class_name='training.networks.Discriminator')
     
-    c.G_opt_kwargs = dnnlib.EasyDict(class_name='torch.optim.Adam', betas=[0,0], eps=1e-8)
-    c.D_opt_kwargs = dnnlib.EasyDict(class_name='torch.optim.Adam', betas=[0,0], eps=1e-8)
+    c.G_opt_kwargs = dnnlib.EasyDict(class_name='torch.optim.Adam', betas=[0.0,0.0], eps=1e-8)
+    c.D_opt_kwargs = dnnlib.EasyDict(class_name='torch.optim.Adam', betas=[0.0,0.0], eps=1e-8)
     
     c.loss_kwargs = dnnlib.EasyDict(class_name='training.loss.R3GANLoss')
     c.data_loader_kwargs = dnnlib.EasyDict(pin_memory=True, prefetch_factor=2)
@@ -175,7 +253,9 @@ def main(**kwargs):
     c.batch_size = opts.batch
     c.g_batch_gpu = opts.g_batch_gpu or opts.batch // opts.gpus
     c.d_batch_gpu = opts.d_batch_gpu or opts.batch // opts.gpus
-    
+   
+    c.no_subdir = opts.no_subdir
+
     if opts.preset == 'CIFAR10':
         WidthPerStage = [x // 2 for x in [1024, 1024, 1024]]
         BlocksPerStage = [['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN']]

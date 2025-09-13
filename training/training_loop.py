@@ -150,7 +150,7 @@ def training_loop(
 ):
     # Initialize.
     start_time = time.time()
-    device = torch.device('cuda', rank)
+    device = torch.device('cuda', rank % torch.cuda.device_count())
     np.random.seed(random_seed * num_gpus + rank)
     torch.manual_seed(random_seed * num_gpus + rank)
     torch.backends.cudnn.benchmark = cudnn_benchmark    # Improves training speed.
@@ -160,8 +160,8 @@ def training_loop(
     grid_sample_gradfix.enabled = True                  # Avoids errors with the augmentation pipe.
           
     if rank == 0:
-        os.mkdir(os.path.join(run_dir, 'ema'))
-        os.mkdir(os.path.join(run_dir, 'snapshots'))
+        os.makedirs(os.path.join(run_dir, 'ema'), exist_ok=True)
+        os.makedirs(os.path.join(run_dir, 'snapshots'), exist_ok=True)
 
     # Load training set.
     if rank == 0:
