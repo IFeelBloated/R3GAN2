@@ -11,37 +11,36 @@
 from torch_utils import training_stats
 from R3GAN.Trainer import AdversarialTraining
 import torch
-import math
 
 #----------------------------------------------------------------------------
 
 class R3GANLoss:
     def __init__(self, G, D, augment_pipe=None):
-        self.trainer = AdversarialTraining(G, D)
         if augment_pipe is not None:
-            self.preprocessor = lambda x: augment_pipe(x.to(torch.float32)).to(x.dtype)
+            preprocessor = lambda images_list: [y.to(images_list[0].dtype) for y in augment_pipe([x.to(torch.float32) for x in images_list])]
+            self.trainer = AdversarialTraining(G, D, preprocessor)
         else:
-            self.preprocessor = lambda x: x
+            self.trainer = AdversarialTraining(G, D)
         
     def accumulate_gradients(self, phase, real_img, real_c, gen_z, gamma, gain):
         # G
         if phase == 'G':
-            AdversarialLoss, RelativisticLogits = self.trainer.AccumulateGeneratorGradients(gen_z, real_img, real_c, gain, self.preprocessor)
+            AdversarialLoss, RelativisticLogits = self.trainer.AccumulateGeneratorGradients(gen_z, real_img, real_c, gain)
             
             training_stats.report('Loss/scores/fake', RelativisticLogits)
             training_stats.report('Loss/signs/fake', RelativisticLogits.sign())
             training_stats.report('Loss/G/loss', AdversarialLoss)
             
-            training_stats.report('Scale/G/gain', self.trainer.Generator.Model.Gain)
+            training_stats.report('Progress/gain', self.trainer.Generator.Model.Gain)
             
             for i, l in enumerate(self.trainer.Generator.Model.MainLayers):
-                for j, a in enumerate(l.ParameterizedAlphas):
-                    Alpha = torch.abs(torch.tanh(a))
+                for j, a in enumerate(l.ParametrizedAlphas):
+                    Alpha = torch.abs(a())
                     training_stats.report('ResidualG/'+str(i)+'/'+str(j), Alpha.mean())
             
         # D
         if phase == 'D':
-            AdversarialLoss, RelativisticLogits, R1Penalty, R2Penalty = self.trainer.AccumulateDiscriminatorGradients(gen_z, real_img, real_c, gamma, gain, self.preprocessor)
+            AdversarialLoss, RelativisticLogits, R1Penalty, R2Penalty = self.trainer.AccumulateDiscriminatorGradients(gen_z, real_img, real_c, gamma, gain)
             
             training_stats.report('Loss/scores/real', RelativisticLogits)
             training_stats.report('Loss/signs/real', RelativisticLogits.sign())
@@ -49,11 +48,9 @@ class R3GANLoss:
             training_stats.report('Loss/r1_penalty', R1Penalty)
             training_stats.report('Loss/r2_penalty', R2Penalty)
             
-            training_stats.report('Scale/D/bias', math.sqrt(3) * self.trainer.Discriminator.Model.Bias)
-            
             for i, l in enumerate(self.trainer.Discriminator.Model.MainLayers):
-                for j, a in enumerate(l.ParameterizedAlphas):
-                    Alpha = torch.abs(torch.tanh(a))
+                for j, a in enumerate(l.ParametrizedAlphas):
+                    Alpha = torch.abs(a())
                     training_stats.report('ResidualD/'+str(i)+'/'+str(j), Alpha.mean())
             
 #----------------------------------------------------------------------------

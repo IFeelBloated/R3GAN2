@@ -86,15 +86,6 @@ def parse_comma_separated_list(s):
 
 #----------------------------------------------------------------------------
 
-@click.command()
-@click.pass_context
-@click.option('network_pkl', '--network', help='Network pickle filename or URL', metavar='PATH', required=True)
-@click.option('--metrics', help='Quality metrics', metavar='[NAME|A,B,C|none]', type=parse_comma_separated_list, default='fid50k_full', show_default=True)
-@click.option('--data', help='Dataset to evaluate against  [default: look up]', metavar='[ZIP|DIR]')
-@click.option('--mirror', help='Enable dataset x-flips  [default: look up]', type=bool, metavar='BOOL')
-@click.option('--gpus', help='Number of GPUs to use', type=int, default=1, metavar='INT', show_default=True)
-@click.option('--verbose', help='Print optional information', type=bool, default=True, metavar='BOOL', show_default=True)
-
 def calc_metrics(ctx, network_pkl, metrics, data, mirror, gpus, verbose):
     """Calculate quality metrics for previous training run or pretrained network pickle.
 
@@ -164,13 +155,12 @@ def calc_metrics(ctx, network_pkl, metrics, data, mirror, gpus, verbose):
     args.run_dir = None
     if os.path.isfile(network_pkl):
         pkl_dir = os.path.dirname(network_pkl)
-        if os.path.isfile(os.path.join(pkl_dir, 'training_options.json')):
-            args.run_dir = pkl_dir
+        args.run_dir = pkl_dir
 
     # Launch processes.
     if args.verbose:
         print('Launching processes...')
-    torch.multiprocessing.set_start_method('spawn')
+    
     with tempfile.TemporaryDirectory() as temp_dir:
         if args.num_gpus == 1:
             subprocess_fn(rank=0, args=args, temp_dir=temp_dir)
@@ -178,8 +168,25 @@ def calc_metrics(ctx, network_pkl, metrics, data, mirror, gpus, verbose):
             torch.multiprocessing.spawn(fn=subprocess_fn, args=(args, temp_dir), nprocs=args.num_gpus)
 
 #----------------------------------------------------------------------------
+@click.command()
+@click.pass_context
+@click.option('--indir', help='Network pickle filename or URL', metavar='PATH', required=True)
+@click.option('--metrics', help='Quality metrics', metavar='[NAME|A,B,C|none]', type=parse_comma_separated_list, default='fid50k_full', show_default=True)
+@click.option('--data', help='Dataset to evaluate against  [default: look up]', metavar='[ZIP|DIR]')
+@click.option('--mirror', help='Enable dataset x-flips  [default: look up]', type=bool, metavar='BOOL')
+@click.option('--gpus', help='Number of GPUs to use', type=int, default=1, metavar='INT', show_default=True)
+@click.option('--verbose', help='Print optional information', type=bool, default=True, metavar='BOOL', show_default=True)
+
+def phema_metrics(ctx, indir, metrics, data, mirror, gpus, verbose):
+    pkls = [x for x in os.listdir(indir) if x.endswith('.pkl')]
+    pkls.sort()
+    
+    torch.multiprocessing.set_start_method('spawn')
+
+    for x in pkls:
+        calc_metrics(ctx, os.path.join(indir, x), metrics, data, mirror, gpus, verbose)
 
 if __name__ == "__main__":
-    calc_metrics() # pylint: disable=no-value-for-parameter
+    phema_metrics() # pylint: disable=no-value-for-parameter
 
 #----------------------------------------------------------------------------
