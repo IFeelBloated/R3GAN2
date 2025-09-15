@@ -119,7 +119,7 @@ def launch_training(c, desc, outdir, dry_run):
         assert not os.path.exists(c.run_dir)
     else:
         c.run_dir = outdir
-        c.resume_pkl = load_latest_checkpoint(outdir)
+        c.resume_pkl = load_latest_checkpoint(outdir + "/snapshots/")
         print(f'Autoresuming from : {c.resume_pkl}') 
 
     c.pop('no_subdir') # removes no_subdir
