@@ -96,11 +96,12 @@ class MultiLayerPerceptron(nn.Module):
         
         self.ActivateOutput = ActivateOutput
         
-        self.LinearLayer1 = Linear(InputDimension, HiddenDimension, Centered=True)
+        self.LinearLayer1 = Linear(InputDimension + 1, HiddenDimension, Centered=True)
         self.LinearLayer2 = Linear(HiddenDimension, OutputDimension, Centered=True)
         self.NonLinearity = LeakyReLU()
         
     def forward(self, x):
+        x = torch.cat([x, torch.ones_like(x[:, :1])], dim=1)
         x = self.LinearLayer2(self.NonLinearity(self.LinearLayer1(x)))
         
         return self.NonLinearity(x) if self.ActivateOutput else x

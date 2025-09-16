@@ -305,9 +305,9 @@ def main(**kwargs):
        
         decay_nimg = 2e8
        
-        c.aug_scheduler = { 'base_value': 0, 'final_value': 0.2, 'total_nimg': decay_nimg }
-        c.lr_scheduler = { 'base_value': 2.5e-3, 'final_value': 1e-3, 'total_nimg': decay_nimg }
-        c.gamma_scheduler = { 'base_value': 0.5, 'final_value': 0.05, 'total_nimg': decay_nimg }
+        c.aug_scheduler = { 'base_value': 0, 'final_value': 0.4, 'total_nimg': decay_nimg }
+        c.lr_scheduler = { 'base_value': 1e-2, 'final_value': 1e-3, 'total_nimg': decay_nimg }
+        c.gamma_scheduler = { 'base_value': 0.05 * 2, 'final_value': 0.005 * 2, 'total_nimg': decay_nimg }
         c.beta2_scheduler = { 'base_value': 0.9, 'final_value': 0.99, 'total_nimg': decay_nimg }
 
     if opts.preset == 'ImageNet-64':
@@ -320,9 +320,9 @@ def main(**kwargs):
         
         decay_nimg = 2e8
         
-        c.aug_scheduler = { 'base_value': 0, 'final_value': 0.2, 'total_nimg': decay_nimg }
-        c.lr_scheduler = { 'base_value': 2.5e-3, 'final_value': 1e-3, 'total_nimg': decay_nimg }
-        c.gamma_scheduler = { 'base_value': 1, 'final_value': 0.1, 'total_nimg': decay_nimg }
+        c.aug_scheduler = { 'base_value': 0, 'final_value': 0.4, 'total_nimg': decay_nimg }
+        c.lr_scheduler = { 'base_value': 1e-2, 'final_value': 1e-3, 'total_nimg': decay_nimg }
+        c.gamma_scheduler = { 'base_value': 0.05 * 4, 'final_value': 0.005 * 4, 'total_nimg': decay_nimg }
         c.beta2_scheduler = { 'base_value': 0.9, 'final_value': 0.99, 'total_nimg': decay_nimg }
 
     c.G_kwargs.NoiseDimension = NoiseDimension
