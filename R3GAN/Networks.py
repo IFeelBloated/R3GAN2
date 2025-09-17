@@ -96,11 +96,12 @@ class MultiLayerPerceptron(nn.Module):
         
         self.ActivateOutput = ActivateOutput
         
-        self.LinearLayer1 = Linear(InputDimension, HiddenDimension, Centered=True)
+        self.LinearLayer1 = Linear(InputDimension + 1, HiddenDimension, Centered=True)
         self.LinearLayer2 = Linear(HiddenDimension, OutputDimension, Centered=True)
         self.NonLinearity = LeakyReLU()
         
     def forward(self, x):
+        x = torch.cat([x, torch.ones_like(x[:, :1])], dim=1)
         x = self.LinearLayer2(self.NonLinearity(self.LinearLayer1(x)))
         
         return self.NonLinearity(x) if self.ActivateOutput else x
@@ -169,6 +170,8 @@ class Discriminator(nn.Module):
     def __init__(self, ModulationDimension, WidthPerStage, BlocksPerStage, MLPWidthRatio, FFNWidthRatio, ChannelsPerConvolutionGroup, AttentionWidthRatio, ChannelsPerAttentionHead, NumberOfClasses=None, ClassEmbeddingDimension=0, KernelSize=3, ResamplingFilter=[1, 2, 1]):
         super(Discriminator, self).__init__()
         
+        ModulationDimension = None
+        
         self.MainLayers = nn.ModuleList(BuildResidualGroups(WidthPerStage, BlocksPerStage, ModulationDimension, FFNWidthRatio, ChannelsPerConvolutionGroup, KernelSize, AttentionWidthRatio, ChannelsPerAttentionHead))
         self.TransitionLayers = nn.ModuleList([DownsampleLayer(WidthPerStage[x], WidthPerStage[x + 1], ResamplingFilter) for x in range(len(WidthPerStage) - 1)])
         
@@ -177,14 +180,11 @@ class Discriminator(nn.Module):
         
         if NumberOfClasses is not None:
             self.EmbeddingLayer = ClassEmbedder(NumberOfClasses, ClassEmbeddingDimension)
-            self.MappingLayer = MultiLayerPerceptron(ClassEmbeddingDimension, ModulationDimension, ModulationDimension * MLPWidthRatio, True)
         
     def forward(self, x, y=None):
         if hasattr(self, 'EmbeddingLayer'):
             y = self.EmbeddingLayer(y)
-            w = self.MappingLayer(y)
-        else:
-            w = None
+        w = None
         x = self.ExtractionLayer(x.to(torch.bfloat16))
         
         for Layer, Transition in zip(self.MainLayers[:-1], self.TransitionLayers):

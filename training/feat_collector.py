@@ -18,9 +18,7 @@ def CollectGeneratorFeatures(Generator, x, y):
 def CollectDiscriminatorFeatures(Discriminator, x, y):
     if hasattr(Discriminator, 'EmbeddingLayer'):
         y = Discriminator.EmbeddingLayer(y)
-        w = Discriminator.MappingLayer(y)
-    else:
-        w = None
+    w = None
     x = Discriminator.ExtractionLayer(x.to(torch.bfloat16))
     f = []
     
