@@ -142,6 +142,8 @@ class Generator(nn.Module):
     def __init__(self, NoiseDimension, ModulationDimension, WidthPerStage, BlocksPerStage, MLPWidthRatio, FFNWidthRatio, ChannelsPerConvolutionGroup, AttentionWidthRatio, ChannelsPerAttentionHead, NumberOfClasses=None, ClassEmbeddingDimension=0, KernelSize=3, ResamplingFilter=[1, 2, 1]):
         super(Generator, self).__init__()
         
+        ModulationDimension = None
+        
         self.MainLayers = nn.ModuleList(BuildResidualGroups(WidthPerStage, BlocksPerStage, ModulationDimension, FFNWidthRatio, ChannelsPerConvolutionGroup, KernelSize, AttentionWidthRatio, ChannelsPerAttentionHead))
         self.TransitionLayers = nn.ModuleList([UpsampleLayer(WidthPerStage[x], WidthPerStage[x + 1], ResamplingFilter) for x in range(len(WidthPerStage) - 1)])
         
@@ -149,14 +151,12 @@ class Generator(nn.Module):
         self.AggregationLayer = Convolution(WidthPerStage[-1], 3, KernelSize=1)
         self.Gain = nn.Parameter(torch.ones([]))
         
-        self.MappingLayer = MultiLayerPerceptron(NoiseDimension + ClassEmbeddingDimension, ModulationDimension, ModulationDimension * MLPWidthRatio, True)
-        
         if NumberOfClasses is not None:
             self.EmbeddingLayer = ClassEmbedder(NumberOfClasses, ClassEmbeddingDimension)
         
     def forward(self, x, y=None):
         x = torch.cat([x, self.EmbeddingLayer(y)], dim=1) if hasattr(self, 'EmbeddingLayer') else x
-        w = self.MappingLayer(x)
+        w = None
         x = self.Head(x).to(torch.bfloat16)
         
         for Layer, Transition in zip(self.MainLayers[:-1], self.TransitionLayers):

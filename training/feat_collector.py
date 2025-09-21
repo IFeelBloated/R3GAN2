@@ -2,7 +2,7 @@ import torch
 
 def CollectGeneratorFeatures(Generator, x, y):
     x = torch.cat([x, Generator.EmbeddingLayer(y)], dim=1) if hasattr(Generator, 'EmbeddingLayer') else x
-    w = Generator.MappingLayer(x)
+    w = None
     x = Generator.Head(x).to(torch.bfloat16)
     f = []
         
