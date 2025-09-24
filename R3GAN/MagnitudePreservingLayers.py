@@ -98,6 +98,31 @@ class BiasedPointwiseConvolutionWithModulation(nn.Module):
             x = x * c.view(c.shape[0], -1, 1, 1).to(x.dtype)
         return nn.functional.conv2d(x, w.to(x.dtype), b.to(x.dtype))
     
+class NoisyBiasedPointwiseConvolutionWithModulation(nn.Module):
+    def __init__(self, InputChannels, OutputChannels, EmbeddingDimension, Centered=False):
+        super(NoisyBiasedPointwiseConvolutionWithModulation, self).__init__()
+        
+        self.Weight = NormalizedWeight(InputChannels + 2, OutputChannels, 1, [1, 1], Centered)
+        
+        if EmbeddingDimension is not None:
+            self.EmbeddingLayer = Linear(EmbeddingDimension, InputChannels, Centered)
+            self.EmbeddingGain = nn.Parameter(torch.zeros([]))
+        
+    def forward(self, x, c, Gain=1):
+        w = self.Weight()
+        w = w / math.sqrt(w[0].numel())
+        b = w[:, -1, :, :].view(-1)
+        s = w[:, -2, :, :].view(-1)
+        w = w[:, :-2, :, :] * Gain
+        if hasattr(self, 'EmbeddingLayer'):
+            c = self.EmbeddingLayer(c, Gain=self.EmbeddingGain) + 1
+            x = x * c.view(c.shape[0], -1, 1, 1).to(x.dtype)
+            
+        s = s.view(1, -1, 1, 1)
+        n = torch.randn([x.shape[0], 1, x.shape[2], x.shape[3]], device=x.device)
+         
+        return nn.functional.conv2d(x, w.to(x.dtype), b.to(x.dtype)).add_(n * s)
+    
 class GenerativeBasis(nn.Module):
     def __init__(self, OutputChannels):
         super(GenerativeBasis, self).__init__()
