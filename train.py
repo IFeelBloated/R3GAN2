@@ -13,6 +13,7 @@ import re
 import json
 import tempfile
 import torch
+import math
 
 import dnnlib
 from training import training_loop
@@ -267,7 +268,7 @@ def main(**kwargs):
         decay_nimg = 2e7
        
         c.aug_scheduler = { 'base_value': 0, 'final_value': 0.55, 'total_nimg': decay_nimg }
-        c.lr_scheduler = { 'base_value': 1e-2, 'final_value': 1e-3, 'total_nimg': decay_nimg }
+        c.lr_scheduler = { 'base_value': 1e-2, 'final_value': 1e-3, 'total_nimg': decay_nimg, 'post_cosine_decay_ref_nimg': decay_nimg }
         c.gamma_scheduler = { 'base_value': 0.05, 'final_value': 0.005, 'total_nimg': decay_nimg }
         c.beta2_scheduler = { 'base_value': 0.9, 'final_value': 0.99, 'total_nimg': decay_nimg }
 
@@ -279,7 +280,7 @@ def main(**kwargs):
         decay_nimg = 2e7
        
         c.aug_scheduler = { 'base_value': 0, 'final_value': 0.3, 'total_nimg': decay_nimg }
-        c.lr_scheduler = { 'base_value': 1e-2, 'final_value': 1e-3, 'total_nimg': decay_nimg }
+        c.lr_scheduler = { 'base_value': 1e-2, 'final_value': 1e-3, 'total_nimg': decay_nimg, 'post_cosine_decay_ref_nimg': decay_nimg }
         c.gamma_scheduler = { 'base_value': 2, 'final_value': 0.2, 'total_nimg': decay_nimg }
         c.beta2_scheduler = { 'base_value': 0.9, 'final_value': 0.99, 'total_nimg': decay_nimg }
 
@@ -291,7 +292,7 @@ def main(**kwargs):
         decay_nimg = 2e7
        
         c.aug_scheduler = { 'base_value': 0, 'final_value': 0.3, 'total_nimg': decay_nimg }
-        c.lr_scheduler = { 'base_value': 1e-2, 'final_value': 1e-3, 'total_nimg': decay_nimg }
+        c.lr_scheduler = { 'base_value': 1e-2, 'final_value': 1e-3, 'total_nimg': decay_nimg, 'post_cosine_decay_ref_nimg': decay_nimg }
         c.gamma_scheduler = { 'base_value': 150, 'final_value': 15, 'total_nimg': decay_nimg }
         c.beta2_scheduler = { 'base_value': 0.9, 'final_value': 0.99, 'total_nimg': decay_nimg }
 
@@ -306,7 +307,7 @@ def main(**kwargs):
         decay_nimg = 2e8
        
         c.aug_scheduler = { 'base_value': 0, 'final_value': 0.4, 'total_nimg': decay_nimg }
-        c.lr_scheduler = { 'base_value': 1e-2, 'final_value': 1e-3, 'total_nimg': decay_nimg }
+        c.lr_scheduler = { 'base_value': 1e-2, 'final_value': 1e-3, 'total_nimg': decay_nimg, 'post_cosine_decay_ref_nimg': decay_nimg }
         c.gamma_scheduler = { 'base_value': 0.1, 'final_value': 0.01, 'total_nimg': decay_nimg }
         c.beta2_scheduler = { 'base_value': 0.9, 'final_value': 0.99, 'total_nimg': decay_nimg }
 
@@ -321,7 +322,7 @@ def main(**kwargs):
         decay_nimg = 2e8
         
         c.aug_scheduler = { 'base_value': 0, 'final_value': 0.4, 'total_nimg': decay_nimg }
-        c.lr_scheduler = { 'base_value': 1e-2, 'final_value': 1e-3, 'total_nimg': decay_nimg }
+        c.lr_scheduler = { 'base_value': 1e-2, 'final_value': 1e-3, 'total_nimg': decay_nimg, 'post_cosine_decay_ref_nimg': decay_nimg }
         c.gamma_scheduler = { 'base_value': 0.4, 'final_value': 0.04, 'total_nimg': decay_nimg }
         c.beta2_scheduler = { 'base_value': 0.9, 'final_value': 0.99, 'total_nimg': decay_nimg }
 
@@ -336,7 +337,7 @@ def main(**kwargs):
         decay_nimg = 2e8
        
         c.aug_scheduler = { 'base_value': 0, 'final_value': 0.45, 'total_nimg': decay_nimg }
-        c.lr_scheduler = { 'base_value': 1e-2, 'final_value': 1e-3, 'total_nimg': decay_nimg }
+        c.lr_scheduler = { 'base_value': 1e-2 / math.sqrt(3), 'final_value': 1e-3 / math.sqrt(3), 'total_nimg': decay_nimg, 'post_cosine_decay_ref_nimg': decay_nimg }
         c.gamma_scheduler = { 'base_value': 0.1, 'final_value': 0.01, 'total_nimg': decay_nimg }
         c.beta2_scheduler = { 'base_value': 0.9, 'final_value': 0.99, 'total_nimg': decay_nimg }
 
