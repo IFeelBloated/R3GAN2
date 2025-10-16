@@ -27,7 +27,7 @@ import legacy
 from metrics import metric_main
 from .feat_collector import CollectGeneratorFeatures, CollectDiscriminatorFeatures, CollectMagnitude
 
-def cosine_decay_with_warmup(cur_nimg, base_value, total_nimg, final_value=0.0, warmup_value=0.0, warmup_nimg=0, hold_base_value_nimg=0):
+def cosine_decay_with_warmup(cur_nimg, base_value, total_nimg, final_value=0.0, warmup_value=0.0, warmup_nimg=0, hold_base_value_nimg=0, post_cosine_decay_ref_nimg=None):
     decay = 0.5 * (1 + np.cos(np.pi * (cur_nimg - warmup_nimg - hold_base_value_nimg) / float(total_nimg - warmup_nimg - hold_base_value_nimg)))
     cur_value = base_value + (1 - decay) * (final_value - base_value)
     if hold_base_value_nimg > 0:
@@ -36,6 +36,8 @@ def cosine_decay_with_warmup(cur_nimg, base_value, total_nimg, final_value=0.0, 
         slope = (base_value - warmup_value) / warmup_nimg
         warmup_v = slope * cur_nimg + warmup_value
         cur_value = np.where(cur_nimg < warmup_nimg, warmup_v, cur_value)
+    if post_cosine_decay_ref_nimg is not None:
+        final_value /= np.sqrt(max((cur_nimg + post_cosine_decay_ref_nimg - total_nimg - warmup_nimg - hold_base_value_nimg) / post_cosine_decay_ref_nimg, 1))
     return float(np.where(cur_nimg > total_nimg, final_value, cur_value))
 
 #----------------------------------------------------------------------------
