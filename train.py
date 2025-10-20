@@ -311,6 +311,21 @@ def main(**kwargs):
         c.gamma_scheduler = { 'base_value': 0.1, 'final_value': 0.01, 'total_nimg': decay_nimg }
         c.beta2_scheduler = { 'base_value': 0.9, 'final_value': 0.99, 'total_nimg': decay_nimg }
 
+    if opts.preset == 'ImageNet-32-largelr':
+        WidthPerStage = [x for x in [1024, 1024, 1024]]
+        BlocksPerStage = [['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN']]
+        NoiseDimension = 64
+       
+        c.G_kwargs.ClassEmbeddingDimension = NoiseDimension
+        c.D_kwargs.ClassEmbeddingDimension = WidthPerStage[0]
+       
+        decay_nimg = 2e8
+       
+        c.aug_scheduler = { 'base_value': 0, 'final_value': 0.4, 'total_nimg': decay_nimg }
+        c.lr_scheduler = { 'base_value': 1e-2, 'final_value': 2.5e-3, 'total_nimg': decay_nimg }
+        c.gamma_scheduler = { 'base_value': 0.1, 'final_value': 0.01, 'total_nimg': decay_nimg }
+        c.beta2_scheduler = { 'base_value': 0.9, 'final_value': 0.99, 'total_nimg': decay_nimg }
+    
     if opts.preset == 'ImageNet-64':
         WidthPerStage = [x for x in [1024, 1024, 1024, 1024]]
         BlocksPerStage = [['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN']]
