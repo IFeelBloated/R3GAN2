@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 from .Resamplers import InterpolativeUpsampler, InterpolativeDownsampler, InplaceUpsampler, InplaceDownsampler
 from .MagnitudePreservingLayers import LeakyReLU, Convolution, Linear, BiasedPointwiseConvolutionWithModulation, NoisyBiasedPointwiseConvolutionWithModulation, CosineAttention, GenerativeBasis, DiscriminativeBasis, BoundedParameter, ClassEmbedder
+from .RoPE import RotaryPositionEmbedding
 
 class MultiHeadSelfAttention(nn.Module):
     def __init__(self, InputChannels, HiddenChannels, EmbeddingDimension, ChannelsPerHead):
@@ -11,12 +12,17 @@ class MultiHeadSelfAttention(nn.Module):
         self.QKVLayer = BiasedPointwiseConvolutionWithModulation(InputChannels, HiddenChannels * 3, EmbeddingDimension, Centered=True)
         self.ProjectionLayer = Convolution(HiddenChannels, InputChannels, KernelSize=1, Centered=True)
         self.Heads = HiddenChannels // ChannelsPerHead
+        self.Sinks = nn.Parameter(torch.zeros(self.Heads))
+        self.RoPE = RotaryPositionEmbedding(embed_dim=HiddenChannels, num_heads=self.Heads)
 
     def forward(self, x, w, InputGain, ResidualGain):
         QKVLayer = lambda y: self.QKVLayer(y, w, Gain=InputGain.view(1, -1, 1, 1))
         ProjectionLayer = lambda y: self.ProjectionLayer(y, Gain=ResidualGain.view(-1, 1, 1, 1))
         
-        return x + CosineAttention(x, self.Heads, QKVLayer, ProjectionLayer)
+        N, C, H, W = x.shape
+        RoPE = self.RoPE(H=H, W=W, device=x.device)
+        
+        return x + CosineAttention(x, self.Heads, QKVLayer, ProjectionLayer, self.Sinks, RoPE, a=4)
 
 class FeedForwardNetwork(nn.Module):
     def __init__(self, InputChannels, HiddenChannels, EmbeddingDimension, ChannelsPerGroup, KernelSize, Noise):

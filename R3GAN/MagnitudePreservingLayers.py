@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import math
 from torch_utils.ops import bias_act
+from .RoPE import apply_rope
 
 def Normalize(x, Dimensions=None, ε=1e-4):
     if Dimensions is None:
@@ -10,14 +11,24 @@ def Normalize(x, Dimensions=None, ε=1e-4):
     Norm = torch.add(ε, Norm, alpha=math.sqrt(Norm.numel() / x.numel()))
     return x / Norm.to(x.dtype)
     
-def CosineAttention(x, Heads, QKVLayer, ProjectionLayer):
+def CosineAttention(x, Heads, QKVLayer, ProjectionLayer, Sinks, RoPE, a):
     y = QKVLayer(x)
     y = y.reshape(y.shape[0], Heads, -1, 3, y.shape[2] * y.shape[3])
     q, k, v = Normalize(y, Dimensions=2).unbind(3)
-    w = torch.einsum('nhcq,nhck->nhqk', q, k / math.sqrt(q.shape[2])).softmax(dim=3)
-    y = torch.einsum('nhqk,nhck->nhcq', w, v)
-    return ProjectionLayer(y.reshape(x.shape[0], -1, x.shape[2], x.shape[3]))
     
+    q = q.permute(0, 1, 3, 2)
+    k = k.permute(0, 1, 3, 2)
+    q, k = apply_rope(q, k, RoPE)
+    q = q.permute(0, 1, 3, 2)
+    k = k.permute(0, 1, 3, 2)
+    
+    w = torch.einsum('nhcq,nhck->nhqk', q, a * k / q.shape[2])
+    s = a * Sinks.to(x.dtype).view(1, -1, 1, 1).repeat(w.shape[0], 1, w.shape[2], 1)
+    w = torch.cat([w, s], dim=3).softmax(dim=3)
+    
+    y = torch.einsum('nhqk,nhck->nhcq', w[..., :-1], v)
+    return ProjectionLayer(y.reshape(x.shape[0], -1, x.shape[2], x.shape[3]))
+        
 class LeakyReLU(nn.Module):
     def __init__(self, α=0.2):
         super(LeakyReLU, self).__init__()
