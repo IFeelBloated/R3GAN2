@@ -178,7 +178,7 @@ def main(**kwargs):
     
     if opts.preset == 'CIFAR10':
         WidthPerStage = [x // 2 for x in [1024, 1024, 1024]]
-        BlocksPerStage = [['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN']]
+        BlocksPerStage = [['FFN', 'FFN', 'Attention', 'FFN', 'FFN'], ['FFN', 'FFN', 'Attention', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN']]
         NoiseDimension = 64
        
         c.G_kwargs.ClassEmbeddingDimension = NoiseDimension
