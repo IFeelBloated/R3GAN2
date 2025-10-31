@@ -200,6 +200,7 @@ def parse_comma_separated_list(s):
 # Required.
 @click.option('--outdir',       help='Where to save the results', metavar='DIR',                required=True)
 @click.option('--data',         help='Training data', metavar='[ZIP|DIR]',                      type=str, required=True)
+@click.option('--eval',         help='Evaluation data', metavar='[ZIP|DIR]',                    type=str, default='none', show_default=True)
 @click.option('--gpus',         help='Number of GPUs to use', metavar='INT',                    type=click.IntRange(min=1), required=True)
 @click.option('--batch',        help='Total batch size', metavar='INT',                         type=click.IntRange(min=1), required=True)
 @click.option('--preset',       help='Preset configs', metavar='STR',                           type=str, required=True)
@@ -248,6 +249,10 @@ def main(**kwargs):
         raise click.ClickException('--cond=True requires labels specified in dataset.json')
     c.training_set_kwargs.use_labels = opts.cond
     c.training_set_kwargs.xflip = opts.mirror
+    
+    if opts.eval == 'none':
+        opts.eval = opts.data
+    c.eval_set_kwargs, _ = init_dataset_kwargs(data=opts.eval)
 
     # Hyperparameters & settings.
     c.num_gpus = opts.gpus
@@ -311,21 +316,6 @@ def main(**kwargs):
         c.gamma_scheduler = { 'base_value': 0.1, 'final_value': 0.01, 'total_nimg': decay_nimg }
         c.beta2_scheduler = { 'base_value': 0.9, 'final_value': 0.99, 'total_nimg': decay_nimg }
 
-    if opts.preset == 'ImageNet-32-largelr':
-        WidthPerStage = [x for x in [1024, 1024, 1024]]
-        BlocksPerStage = [['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN']]
-        NoiseDimension = 64
-       
-        c.G_kwargs.ClassEmbeddingDimension = NoiseDimension
-        c.D_kwargs.ClassEmbeddingDimension = WidthPerStage[0]
-       
-        decay_nimg = 2e8
-       
-        c.aug_scheduler = { 'base_value': 0, 'final_value': 0.4, 'total_nimg': decay_nimg }
-        c.lr_scheduler = { 'base_value': 1e-2, 'final_value': 2.5e-3, 'total_nimg': decay_nimg }
-        c.gamma_scheduler = { 'base_value': 0.1, 'final_value': 0.01, 'total_nimg': decay_nimg }
-        c.beta2_scheduler = { 'base_value': 0.9, 'final_value': 0.99, 'total_nimg': decay_nimg }
-    
     if opts.preset == 'ImageNet-64':
         WidthPerStage = [x for x in [1024, 1024, 1024, 1024]]
         BlocksPerStage = [['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN']]
@@ -341,8 +331,8 @@ def main(**kwargs):
         c.gamma_scheduler = { 'base_value': 0.4, 'final_value': 0.04, 'total_nimg': decay_nimg }
         c.beta2_scheduler = { 'base_value': 0.9, 'final_value': 0.99, 'total_nimg': decay_nimg }
 
-    if opts.preset == 'ImageNet-32XL':
-        WidthPerStage = [x * 3 for x in [1024, 1024, 1024]]
+    if opts.preset == 'ImageNet-256S':
+        WidthPerStage = [x for x in [1024, 1024, 1024]]
         BlocksPerStage = [['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN']]
         NoiseDimension = 64
        
@@ -351,9 +341,9 @@ def main(**kwargs):
        
         decay_nimg = 2e8
        
-        c.aug_scheduler = { 'base_value': 0, 'final_value': 0.45, 'total_nimg': decay_nimg }
-        c.lr_scheduler = { 'base_value': 1e-2 / math.sqrt(3), 'final_value': 1e-3 / math.sqrt(3), 'total_nimg': decay_nimg, 'post_cosine_decay_ref_nimg': decay_nimg }
-        c.gamma_scheduler = { 'base_value': 0.1, 'final_value': 0.01, 'total_nimg': decay_nimg }
+        c.aug_scheduler = { 'base_value': 0, 'final_value': 0.4, 'total_nimg': decay_nimg }
+        c.lr_scheduler = { 'base_value': 1e-2, 'final_value': 1e-3, 'total_nimg': decay_nimg, 'post_cosine_decay_ref_nimg': None }
+        c.gamma_scheduler = { 'base_value': 0.1, 'final_value': 0.01 * 2, 'total_nimg': decay_nimg }
         c.beta2_scheduler = { 'base_value': 0.9, 'final_value': 0.99, 'total_nimg': decay_nimg }
 
     c.G_kwargs.NoiseDimension = NoiseDimension
