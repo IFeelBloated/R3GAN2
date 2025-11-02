@@ -32,6 +32,7 @@ class Dataset(torch.utils.data.Dataset):
         xflip       = False,    # Artificially double the size of the dataset via x-flips. Applied after max_size.
         random_seed = 0,        # Random seed to use when applying max_size.
     ):
+        xflip = False
         self._name = name
         self._raw_shape = list(raw_shape)
         self._use_labels = use_labels
@@ -88,9 +89,9 @@ class Dataset(torch.utils.data.Dataset):
         image = self._load_raw_image(self._raw_idx[idx])
         assert isinstance(image, np.ndarray)
         assert list(image.shape) == self.image_shape
-        if self._xflip[idx]:
-            assert image.ndim == 3 # CHW
-            image = image[:, :, ::-1]
+        # if self._xflip[idx]:
+        #     assert image.ndim == 3 # CHW
+        #     image = image[:, :, ::-1]
         return image.copy(), self.get_label(idx)
 
     def get_label(self, idx):
