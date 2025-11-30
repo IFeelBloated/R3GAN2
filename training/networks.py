@@ -9,9 +9,12 @@ class Generator(nn.Module):
         config = copy.deepcopy(kw)
         del config['c_dim']
         del config['img_resolution']
+        del config['img_channels']
         
         if kw['c_dim'] != 0:
             config['NumberOfClasses'] = kw['c_dim']
+        
+        config['OutputChannels'] = kw['img_channels']
         
         self.Model = R3GAN.Networks.Generator(*args, **config)
         self.z_dim = kw['NoiseDimension']
@@ -28,9 +31,12 @@ class Discriminator(nn.Module):
         config = copy.deepcopy(kw)
         del config['c_dim']
         del config['img_resolution']
+        del config['img_channels']
         
         if kw['c_dim'] != 0:
             config['NumberOfClasses'] = kw['c_dim']
+            
+        config['InputChannels'] = kw['img_channels']
         
         self.Model = R3GAN.Networks.Discriminator(*args, **config)
         

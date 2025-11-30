@@ -149,7 +149,7 @@ def BuildResidualGroups(WidthPerStage, BlocksPerStage, EmbeddingDimension, FFNWi
     return ResidualGroups
     
 class Generator(nn.Module):
-    def __init__(self, NoiseDimension, ModulationDimension, WidthPerStage, BlocksPerStage, MLPWidthRatio, FFNWidthRatio, ChannelsPerConvolutionGroup, AttentionWidthRatio, ChannelsPerAttentionHead, NumberOfClasses=None, ClassEmbeddingDimension=0, KernelSize=3, ResamplingFilter=[1, 2, 1]):
+    def __init__(self, NoiseDimension, ModulationDimension, OutputChannels, WidthPerStage, BlocksPerStage, MLPWidthRatio, FFNWidthRatio, ChannelsPerConvolutionGroup, AttentionWidthRatio, ChannelsPerAttentionHead, NumberOfClasses=None, ClassEmbeddingDimension=0, KernelSize=3, ResamplingFilter=[1, 2, 1]):
         super(Generator, self).__init__()
         
         ModulationDimension = None
@@ -158,7 +158,7 @@ class Generator(nn.Module):
         self.TransitionLayers = nn.ModuleList([UpsampleLayer(WidthPerStage[x], WidthPerStage[x + 1], ResamplingFilter) for x in range(len(WidthPerStage) - 1)])
         
         self.Head = GenerativeHead(NoiseDimension + ClassEmbeddingDimension, WidthPerStage[0], WidthPerStage[0] * MLPWidthRatio)
-        self.AggregationLayer = Convolution(WidthPerStage[-1], 3, KernelSize=1)
+        self.AggregationLayer = Convolution(WidthPerStage[-1], OutputChannels, KernelSize=1)
         self.Gain = nn.Parameter(torch.ones([]))
         
         if NumberOfClasses is not None:
@@ -177,7 +177,7 @@ class Generator(nn.Module):
         return self.AggregationLayer(x, Gain=self.Gain * torch.rsqrt(AccumulatedVariance).view(1, -1, 1, 1))
 
 class Discriminator(nn.Module):
-    def __init__(self, ModulationDimension, WidthPerStage, BlocksPerStage, MLPWidthRatio, FFNWidthRatio, ChannelsPerConvolutionGroup, AttentionWidthRatio, ChannelsPerAttentionHead, NumberOfClasses=None, ClassEmbeddingDimension=0, KernelSize=3, ResamplingFilter=[1, 2, 1]):
+    def __init__(self, ModulationDimension, InputChannels, WidthPerStage, BlocksPerStage, MLPWidthRatio, FFNWidthRatio, ChannelsPerConvolutionGroup, AttentionWidthRatio, ChannelsPerAttentionHead, NumberOfClasses=None, ClassEmbeddingDimension=0, KernelSize=3, ResamplingFilter=[1, 2, 1]):
         super(Discriminator, self).__init__()
         
         ModulationDimension = None
@@ -186,7 +186,7 @@ class Discriminator(nn.Module):
         self.TransitionLayers = nn.ModuleList([DownsampleLayer(WidthPerStage[x], WidthPerStage[x + 1], ResamplingFilter) for x in range(len(WidthPerStage) - 1)])
         
         self.Head = DiscriminativeHead(WidthPerStage[-1], 1 if NumberOfClasses is None else ClassEmbeddingDimension, WidthPerStage[-1] * MLPWidthRatio)
-        self.ExtractionLayer = Convolution(3, WidthPerStage[0], KernelSize=1)
+        self.ExtractionLayer = Convolution(InputChannels, WidthPerStage[0], KernelSize=1)
         
         if NumberOfClasses is not None:
             self.EmbeddingLayer = ClassEmbedder(NumberOfClasses, ClassEmbeddingDimension)
