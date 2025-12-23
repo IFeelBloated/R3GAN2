@@ -19,7 +19,7 @@ def CollectDiscriminatorFeatures(Discriminator, x, y):
     if hasattr(Discriminator, 'EmbeddingLayer'):
         y = Discriminator.EmbeddingLayer(y)
     w = None
-    x = Discriminator.ExtractionLayer(x.to(torch.bfloat16))
+    x = Discriminator.ExtractionLayer((x + Discriminator.Bias.view(1, -1, 1, 1)).to(torch.bfloat16), Gain=Discriminator.Gain.view(1, -1, 1, 1))
     f = []
     
     for Layer, Transition in zip(Discriminator.MainLayers[:-1], Discriminator.TransitionLayers):

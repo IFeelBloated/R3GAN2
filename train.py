@@ -185,6 +185,8 @@ def main(**kwargs):
         WidthPerStage = [x // 2 for x in [1024, 1024, 1024]]
         BlocksPerStage = [['FFN', 'FFN', 'Attention', 'FFN', 'FFN'], ['FFN', 'FFN', 'Attention', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN']]
         NoiseDimension = 64
+        aug_config = dict(xflip=1, rotate90=1, xint=1, scale=1, rotate=1, aniso=1, xfrac=1, brightness=0.5, contrast=0.5, lumaflip=0.5, hue=0.5, saturation=0.5, cutout=1)
+        ema_stds = [0.010, 0.050, 0.100]
        
         c.G_kwargs.ClassEmbeddingDimension = NoiseDimension
         c.D_kwargs.ClassEmbeddingDimension = WidthPerStage[0]
@@ -200,6 +202,8 @@ def main(**kwargs):
         WidthPerStage = [x // 2 for x in [1024, 1024, 1024, 1024]]
         BlocksPerStage = [['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN']]
         NoiseDimension = 64
+        aug_config = dict(xflip=1, rotate90=1, xint=1, scale=1, rotate=1, aniso=1, xfrac=1, brightness=0.5, contrast=0.5, lumaflip=0.5, hue=0.5, saturation=0.5, cutout=1)
+        ema_stds = [0.010, 0.050, 0.100]
        
         decay_nimg = 2e7
        
@@ -212,6 +216,8 @@ def main(**kwargs):
         WidthPerStage = [x // 2 for x in [1024, 1024, 1024, 1024, 512, 256]]
         BlocksPerStage = [['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN']]
         NoiseDimension = 64
+        aug_config = dict(xflip=1, rotate90=1, xint=1, scale=1, rotate=1, aniso=1, xfrac=1, brightness=0.5, contrast=0.5, lumaflip=0.5, hue=0.5, saturation=0.5, cutout=1)
+        ema_stds = [0.010, 0.050, 0.100]
        
         decay_nimg = 2e7
        
@@ -224,6 +230,8 @@ def main(**kwargs):
         WidthPerStage = [x for x in [1024, 1024, 1024]]
         BlocksPerStage = [['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN']]
         NoiseDimension = 64
+        aug_config = dict(xflip=1, rotate90=1, xint=1, scale=1, rotate=1, aniso=1, xfrac=1, brightness=0.5, contrast=0.5, lumaflip=0.5, hue=0.5, saturation=0.5, cutout=1)
+        ema_stds = [0.010, 0.050, 0.100]
        
         c.G_kwargs.ClassEmbeddingDimension = NoiseDimension
         c.D_kwargs.ClassEmbeddingDimension = WidthPerStage[0]
@@ -239,6 +247,8 @@ def main(**kwargs):
         WidthPerStage = [x for x in [1024, 1024, 1024, 1024]]
         BlocksPerStage = [['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN']]
         NoiseDimension = 64
+        aug_config = dict(xflip=1, rotate90=1, xint=1, scale=1, rotate=1, aniso=1, xfrac=1, brightness=0.5, contrast=0.5, lumaflip=0.5, hue=0.5, saturation=0.5, cutout=1)
+        ema_stds = [0.010, 0.050, 0.100]
         
         c.G_kwargs.ClassEmbeddingDimension = NoiseDimension
         c.D_kwargs.ClassEmbeddingDimension = WidthPerStage[0]
@@ -289,7 +299,9 @@ def main(**kwargs):
             
     # Augmentation.
     if opts.aug:
-        c.augment_kwargs = dnnlib.EasyDict(class_name='training.augment.AugmentPipe', xflip=1, rotate90=1, xint=1, scale=1, rotate=1, aniso=1, xfrac=1, brightness=0.5, contrast=0.5, lumaflip=0.5, hue=0.5, saturation=0.5, cutout=1)
+        c.augment_kwargs = dnnlib.EasyDict(class_name='training.augment.AugmentPipe', **aug_config)
+        
+    c.ema_kwargs = dnnlib.EasyDict(class_name='training.phema.PowerFunctionEMA', stds=ema_stds)
 
     # Resume.
     if opts.resume is not None:

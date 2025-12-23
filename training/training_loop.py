@@ -129,7 +129,7 @@ def training_loop(
     D_opt_kwargs            = {},       # Options for discriminator optimizer.
     lr_scheduler            = None,
     beta2_scheduler         = None,
-    ema_kwargs              = dict(class_name='training.phema.PowerFunctionEMA'),
+    ema_kwargs              = None,
     augment_kwargs          = None,     # Options for augmentation pipeline. None = disable.
     loss_kwargs             = {},       # Options for loss function.
     gamma_scheduler         = None,
