@@ -147,16 +147,19 @@ class DiscriminativeBasis(nn.Module):
     def __init__(self, InputChannels):
         super(DiscriminativeBasis, self).__init__()
         
-        self.Basis = WeightNormalizedConvolution(InputChannels, InputChannels, InputChannels, False, [8, 8], False)
+        # self.Basis = WeightNormalizedConvolution(InputChannels, InputChannels, InputChannels, False, [8, 8], False)
         
     def forward(self, x, Gain):
-        return self.Basis(x, Gain=Gain).view(x.shape[0], -1)
+        return (x * Gain).mean(dim=[2, 3], keepdim=True).view(x.shape[0], -1)
     
 class ClassEmbedder(nn.Module):
     def __init__(self, NumberOfClasses, EmbeddingDimension):
         super(ClassEmbedder, self).__init__()
         
         self.Weight = NormalizedWeight(EmbeddingDimension, NumberOfClasses, 1, [], True)
+        init = NormalizedWeight(EmbeddingDimension, 1, 1, [], True)
+
+        self.Weight.Weight.data.copy_(init().repeat(NumberOfClasses, 1))
     
     def forward(self, x):
         return x @ self.Weight().to(x.dtype)
