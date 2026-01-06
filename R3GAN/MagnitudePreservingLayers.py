@@ -133,7 +133,7 @@ class NoisyBiasedPointwiseConvolutionWithModulation(nn.Module):
         n = torch.randn([x.shape[0], 1, x.shape[2], x.shape[3]], device=x.device)
          
         return nn.functional.conv2d(x, w.to(x.dtype), b.to(x.dtype)).add_(n * s)
-    
+
 class GenerativeBasis(nn.Module):
     def __init__(self, OutputChannels):
         super(GenerativeBasis, self).__init__()
@@ -142,15 +142,15 @@ class GenerativeBasis(nn.Module):
         
     def forward(self, x):
         return self.Basis().view(1, -1, 8, 8) * x.view(x.shape[0], -1, 1, 1)
-    
+
 class DiscriminativeBasis(nn.Module):
     def __init__(self, InputChannels):
         super(DiscriminativeBasis, self).__init__()
         
-        # self.Basis = WeightNormalizedConvolution(InputChannels, InputChannels, InputChannels, False, [8, 8], False)
+        self.Basis = WeightNormalizedConvolution(InputChannels, InputChannels, InputChannels, False, [8, 8], False)
         
-    def forward(self, x, Gain):
-        return (x * Gain).mean(dim=[2, 3], keepdim=True).view(x.shape[0], -1)
+    def forward(self, x):
+        return self.Basis(x).view(x.shape[0], -1)
     
 class ClassEmbedder(nn.Module):
     def __init__(self, NumberOfClasses, EmbeddingDimension):
