@@ -308,7 +308,7 @@ def main(**kwargs):
         c.beta2_scheduler = { 'base_value': 0.9, 'final_value': 0.99, 'total_nimg': decay_nimg }
 
     if opts.preset == 'ImageNet-32':
-        WidthPerStage = [x for x in [1024, 1024, 1024]]
+        WidthPerStage = [3 * x // 2 for x in [1024, 1024, 1024]]
         BlocksPerStage = [['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN']]
         NoiseDimension = 64
         aug_config = dict(xflip=1, rotate90=1, xint=1, scale=1, rotate=1, aniso=1, xfrac=1, brightness=0.5, contrast=0.5, lumaflip=0.5, hue=0.5, saturation=0.5, cutout=1)
@@ -320,12 +320,12 @@ def main(**kwargs):
         decay_nimg = 2e8
        
         c.aug_scheduler = { 'base_value': 0, 'final_value': 0.4, 'total_nimg': decay_nimg }
-        c.lr_scheduler = { 'base_value': 1e-2, 'final_value': 1e-3, 'total_nimg': decay_nimg, 'post_cosine_decay_ref_nimg': decay_nimg }
-        c.gamma_scheduler = { 'base_value': 0.5, 'final_value': 0.05, 'total_nimg': decay_nimg }
+        c.lr_scheduler = { 'base_value': 1e-2, 'final_value': 1e-3, 'total_nimg': decay_nimg }
+        c.gamma_scheduler = { 'base_value': 0.01, 'final_value': 0.02, 'total_nimg': decay_nimg }
         c.beta2_scheduler = { 'base_value': 0.9, 'final_value': 0.99, 'total_nimg': decay_nimg }
 
     if opts.preset == 'ImageNet-64':
-        WidthPerStage = [x for x in [1024, 1024, 1024, 1024]]
+        WidthPerStage = [3 * x // 2 for x in [1024, 1024, 1024, 1024]]
         BlocksPerStage = [['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN']]
         NoiseDimension = 64
         aug_config = dict(xflip=1, rotate90=1, xint=1, scale=1, rotate=1, aniso=1, xfrac=1, brightness=0.5, contrast=0.5, lumaflip=0.5, hue=0.5, saturation=0.5, cutout=1)
@@ -337,15 +337,15 @@ def main(**kwargs):
         decay_nimg = 2e8
         
         c.aug_scheduler = { 'base_value': 0, 'final_value': 0.4, 'total_nimg': decay_nimg }
-        c.lr_scheduler = { 'base_value': 1e-2, 'final_value': 1e-3, 'total_nimg': decay_nimg, 'post_cosine_decay_ref_nimg': decay_nimg }
-        c.gamma_scheduler = { 'base_value': 1, 'final_value': 0.1, 'total_nimg': decay_nimg }
+        c.lr_scheduler = { 'base_value': 1e-2, 'final_value': 1e-3, 'total_nimg': decay_nimg }
+        c.gamma_scheduler = { 'base_value': 0.02, 'final_value': 0.04, 'total_nimg': decay_nimg }
         c.beta2_scheduler = { 'base_value': 0.9, 'final_value': 0.99, 'total_nimg': decay_nimg }
 
     if opts.preset == 'ImageNet-256S':
         WidthPerStage = [3 * x // 2 for x in [1024, 1024, 1024]]
         BlocksPerStage = [['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN']]
         NoiseDimension = 64
-        aug_config = dict(xflip=1, rotate90=1, xint=1, scale=1, rotate=1, aniso=1, xfrac=1, cutout=1)
+        aug_config = dict()
         ema_stds = [0.050, 0.100, 0.200, 0.300]
        
         c.G_kwargs.ClassEmbeddingDimension = NoiseDimension
@@ -353,7 +353,7 @@ def main(**kwargs):
        
         decay_nimg = 2e8
        
-        c.aug_scheduler = { 'base_value': 0, 'final_value': 0.2, 'total_nimg': decay_nimg }
+        c.aug_scheduler = { 'base_value': 0, 'final_value': 0, 'total_nimg': decay_nimg }
         c.lr_scheduler = { 'base_value': 1e-2, 'final_value': 1e-3, 'total_nimg': decay_nimg }
         c.gamma_scheduler = { 'base_value': 0.1024, 'final_value': 0.2048, 'total_nimg': decay_nimg }
         c.beta2_scheduler = { 'base_value': 0.9, 'final_value': 0.99, 'total_nimg': decay_nimg }
