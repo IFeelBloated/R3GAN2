@@ -158,8 +158,8 @@ def main(**kwargs):
     c.G_kwargs = dnnlib.EasyDict(class_name='training.networks.Generator')
     c.D_kwargs = dnnlib.EasyDict(class_name='training.networks.Discriminator')
     
-    c.G_opt_kwargs = dnnlib.EasyDict(class_name='torch.optim.Adam', betas=[0,0], eps=1e-8)
-    c.D_opt_kwargs = dnnlib.EasyDict(class_name='torch.optim.Adam', betas=[0,0], eps=1e-8)
+    c.G_opt_kwargs = dnnlib.EasyDict(class_name='torch.optim.Adam', betas=[0.,0.], eps=1e-8)
+    c.D_opt_kwargs = dnnlib.EasyDict(class_name='torch.optim.Adam', betas=[0.,0.], eps=1e-8)
     
     c.loss_kwargs = dnnlib.EasyDict(class_name='training.loss.R3GANLoss')
     c.data_loader_kwargs = dnnlib.EasyDict(pin_memory=True, prefetch_factor=2)
@@ -183,7 +183,7 @@ def main(**kwargs):
     
     if opts.preset == 'CIFAR10':
         WidthPerStage = [x // 2 for x in [1024, 1024, 1024]]
-        BlocksPerStage = [['FFN', 'FFN', 'Attention', 'FFN', 'FFN'], ['FFN', 'FFN', 'Attention', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN']]
+        BlocksPerStage = [['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN'], ['FFN', 'FFN', 'FFN', 'FFN']]
         NoiseDimension = 64
         aug_config = dict(xflip=1, rotate90=1, xint=1, scale=1, rotate=1, aniso=1, xfrac=1, brightness=0.5, contrast=0.5, lumaflip=0.5, hue=0.5, saturation=0.5, cutout=1)
         ema_stds = [0.010, 0.050, 0.100]
