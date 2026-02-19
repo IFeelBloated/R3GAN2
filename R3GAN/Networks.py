@@ -107,34 +107,37 @@ class GenerativeHead(nn.Module):
     def __init__(self, InputDimension, OutputChannels, ResamplingFilter):
         super(GenerativeHead, self).__init__()
 
-        self.LinearLayer = Linear(InputDimension + 1, OutputChannels * 2, Centered=True)
-        self.Basis = GenerativeBasis(OutputChannels * 2)
+        self.LinearLayer1 = Linear(InputDimension + 1, OutputChannels * 2, Centered=True)
+        self.LinearLayer2 = GenerativeBasis(OutputChannels * 2)
         self.NonLinearity = LeakyReLU()
-        self.LinearLayer2 = Convolution(OutputChannels * 2, OutputChannels, KernelSize=1, Centered=True)
+        self.LinearLayer3 = Convolution(OutputChannels * 2, OutputChannels, KernelSize=1, Centered=True)
+        self.Resampler = InterpolativeUpsampler(ResamplingFilter)
         
     def forward(self, x):
         x = torch.cat([x, torch.ones_like(x[:, :1])], dim=1)
-        x = self.Basis(self.LinearLayer(x))
-        x = self.LinearLayer2(self.NonLinearity(x))
 
-        return x
+        y = self.LinearLayer1(x)
+        y = self.LinearLayer2(self.NonLinearity(y))
+        y = self.LinearLayer3(self.NonLinearity(y))
+
+        return self.Resampler(y)
 
 class DiscriminativeHead(nn.Module):
     def __init__(self, InputChannels, OutputDimension, ResamplingFilter):
         super(DiscriminativeHead, self).__init__()
 
-        self.LinearLayer = BiasedPointwiseConvolutionWithModulation(InputChannels, InputChannels * 2, None, Centered=True)
+        self.LinearLayer1 = BiasedPointwiseConvolutionWithModulation(InputChannels, InputChannels * 2, None, Centered=True)
         self.NonLinearity = LeakyReLU()
-        self.Basis = DiscriminativeBasis(InputChannels * 2)
-        self.LinearLayer2 = Linear(InputChannels * 2, OutputDimension, Centered=True)
-
+        self.LinearLayer2 = DiscriminativeBasis(InputChannels * 2)
+        self.LinearLayer3 = Linear(InputChannels * 2, OutputDimension, Centered=True)
+        self.Resampler = InterpolativeDownsampler(ResamplingFilter)
 
     def forward(self, x, Gain):
-        x = x * Gain.view(1, -1, 1, 1).to(x.dtype)
-        x = self.NonLinearity(self.LinearLayer(x, None))
-        x = self.LinearLayer2(self.Basis(x))
+        y = self.LinearLayer1(self.Resampler(x), None, Gain=Gain.view(1, -1, 1, 1))
+        y = self.LinearLayer2(self.NonLinearity(y))
+        y = self.LinearLayer3(self.NonLinearity(y))
 
-        return x
+        return y
 
 
 

@@ -138,16 +138,20 @@ class GenerativeBasis(nn.Module):
     def __init__(self, OutputChannels):
         super(GenerativeBasis, self).__init__()
         
-        self.Basis = NormalizedWeight(1, OutputChannels, 1, [8, 8], False)
+        self.Basis = NormalizedWeight(OutputChannels, OutputChannels, OutputChannels // 32, [4, 4], True)
         
     def forward(self, x):
-        return self.Basis().view(1, -1, 8, 8) * x.view(x.shape[0], -1, 1, 1)
+        w = self.Basis()
+        x = x.view(x.shape[0], -1, 32)
+        w = w.view(x.shape[1], -1, *w.shape[1:]) / math.sqrt(x.shape[-1])
+        x = torch.einsum('ngc,gochw->ngohw', x, w).contiguous()
+        return x.view(x.shape[0], -1, *x.shape[3:])
 
 class DiscriminativeBasis(nn.Module):
     def __init__(self, InputChannels):
         super(DiscriminativeBasis, self).__init__()
         
-        self.Basis = WeightNormalizedConvolution(InputChannels, InputChannels, InputChannels, False, [8, 8], False)
+        self.Basis = WeightNormalizedConvolution(InputChannels, InputChannels, InputChannels // 32, False, [4, 4], True)
         
     def forward(self, x):
         return self.Basis(x).view(x.shape[0], -1)
