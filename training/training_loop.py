@@ -180,6 +180,8 @@ def training_loop(
         encoder_kwargs = dnnlib.EasyDict(class_name='training.encoders.StandardRGBEncoder')
     elif training_set.num_channels == 8:
         encoder_kwargs = dnnlib.EasyDict(class_name='training.encoders.StabilityVAEEncoder')
+    else:
+        encoder_kwargs = dnnlib.EasyDict(class_name='training.encoders.Flux2VAEEncoder')
     encoder = dnnlib.util.construct_class_by_name(**encoder_kwargs)
     
     ref_image, _ = training_set[0]

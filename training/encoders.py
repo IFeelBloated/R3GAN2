@@ -150,3 +150,102 @@ def load_stability_vae(vae_name='stabilityai/sd-vae-ft-mse', device=torch.device
     return vae.eval().requires_grad_(False).to(device)
 
 #----------------------------------------------------------------------------
+
+@persistence.persistent_class
+class Flux2VAEEncoder(Encoder):
+    def __init__(self, 
+        vae_name='black-forest-labs/FLUX.2-dev', 
+        latent_stats_path='latent_stats.npz',
+        final_mean=0,                           
+        final_std=0.5,  
+        batch_size=8
+    ):
+        super().__init__()
+        self.vae_name = vae_name
+        self.batch_size = int(batch_size)
+        self._vae = None
+
+        if os.path.exists(latent_stats_path):
+            stats = np.load(latent_stats_path)
+            raw_mean = stats['mean']
+            raw_std = stats['std']
+            self.scale = np.float32(final_std) / np.float32(raw_std)
+            self.bias = np.float32(final_mean) - np.float32(raw_mean) * self.scale
+        else:
+            raise RuntimeError("NO STATS")
+
+    def init(self, device): 
+        super().init(device)
+        if self._vae is None:
+            self._vae = load_flux2_vae(self.vae_name, device=device)
+        else:
+            self._vae.to(device)
+
+    def __getstate__(self):
+        return dict(super().__getstate__(), _vae=None)
+
+    def _run_vae_encoder(self, x):
+        d = self._vae.encode(x)['latent_dist']
+        return torch.cat([d.mean, d.std], dim=1)
+
+    def _run_vae_decoder(self, x):
+        return self._vae.decode(x)['sample']
+    
+    def normalize(self, x):
+        bn_mean = self._vae.bn.running_mean.view(1, -1, 1, 1).to(x.device, x.dtype)
+        bn_var = self._vae.bn.running_var.view(1, -1, 1, 1).to(x.device, x.dtype)
+        bn_eps = self._vae.config.batch_norm_eps
+        bn_std = torch.sqrt(bn_var + bn_eps)
+        return (x - bn_mean) / bn_std
+    
+    def inv_normalize(self, x):
+        bn_mean = self._vae.bn.running_mean.view(1, -1, 1, 1).to(x.device, x.dtype)
+        bn_var = self._vae.bn.running_var.view(1, -1, 1, 1).to(x.device, x.dtype)
+        bn_eps = self._vae.config.batch_norm_eps
+        bn_std = torch.sqrt(bn_var + bn_eps)
+        return x * bn_std + bn_mean
+
+    def encode_pixels(self, x): # raw pixels => raw latents
+        self.init(x.device)
+        x = (x.to(torch.float32) / 127.5) - 1.0
+        x = torch.cat([self._run_vae_encoder(batch) for batch in x.split(self.batch_size)])
+        # x, _ = x.to(torch.float32).chunk(2, dim=1)
+        return x
+
+    def encode_latents(self, x): # raw latents => final latents
+        mean, std = x.to(torch.float32).chunk(2, dim=1)
+        x = mean + torch.randn_like(mean) * std
+        x = x * misc.const_like(x, self.scale).reshape(1, -1, 1, 1)
+        x = x + misc.const_like(x, self.bias).reshape(1, -1, 1, 1)
+        return x
+
+    def decode(self, x): # final latents => raw pixels
+        self.init(x.device)
+        x = x.to(torch.float32)
+        x = x - misc.const_like(x, self.bias).reshape(1, -1, 1, 1)
+        x = x / misc.const_like(x, self.scale).reshape(1, -1, 1, 1)
+        x = torch.cat([self._run_vae_decoder(batch) for batch in x.split(self.batch_size)])
+        x = (x / 2 + 0.5).clamp(0, 1).mul(255).to(torch.uint8)
+        return x
+    
+#----------------------------------------------------------------------------
+
+def load_flux2_vae(vae_name='black-forest-labs/FLUX.2-dev', device=torch.device('cpu')):
+    import dnnlib
+    cache_dir = dnnlib.make_cache_dir_path('diffusers')
+    os.environ['HF_HUB_DISABLE_SYMLINKS_WARNING'] = '1'
+    os.environ['HF_HUB_DISABLE_PROGRESS_BARS'] = '1'
+    os.environ['HF_HOME'] = cache_dir
+    token = os.environ.get("HF_TOKEN") 
+
+    import diffusers # pip install diffusers # pyright: ignore [reportMissingImports]
+    try:
+        # First try with local_files_only to avoid consulting tfhub metadata if the model is already in cache.
+        vae = diffusers.models.AutoencoderKLFlux2.from_pretrained(vae_name, subfolder="vae", cache_dir=cache_dir, local_files_only=True)
+    except:
+        # Could not load the model from cache; try without local_files_only.
+        vae = diffusers.models.AutoencoderKLFlux2.from_pretrained(vae_name, subfolder="vae", cache_dir=cache_dir, token=token)
+
+    return vae.eval().requires_grad_(False).to(device)
+
+#----------------------------------------------------------------------------
