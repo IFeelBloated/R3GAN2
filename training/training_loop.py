@@ -346,7 +346,7 @@ def training_loop(
         
         if lr_scheduler_type == 'R3GAN':
             cur_lr = cosine_decay_with_warmup(cur_nimg, **lr_scheduler)
-        else lr_scheduler_type == 'EDM2':
+        elif lr_scheduler_type == 'EDM2':
             cur_lr = edm2_learning_rate_schedule(cur_nimg, **lr_scheduler)
         cur_beta2 = cosine_decay_with_warmup(cur_nimg, **beta2_scheduler)
         cur_gamma = cosine_decay_with_warmup(cur_nimg, **gamma_scheduler)
