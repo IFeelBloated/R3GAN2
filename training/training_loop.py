@@ -42,6 +42,16 @@ def cosine_decay_with_warmup(cur_nimg, base_value, total_nimg, final_value=0.0, 
 
 #----------------------------------------------------------------------------
 
+def edm2_learning_rate_schedule(cur_nimg, batch_size, ref_lr, ref_batches, rampup_Mimg):
+    lr = ref_lr
+    if ref_batches > 0:
+        lr /= np.sqrt(max(cur_nimg / (ref_batches * batch_size), 1))
+    if rampup_Mimg > 0:
+        lr *= min(cur_nimg / (rampup_Mimg * 1e6), 1)
+    return lr
+
+#----------------------------------------------------------------------------
+
 def setup_snapshot_image_grid(training_set, random_seed=0):
     rnd = np.random.RandomState(random_seed)
     gw = np.clip(7680 // training_set.image_shape[2], 7, 32)
@@ -127,6 +137,7 @@ def training_loop(
     D_kwargs                = {},       # Options for discriminator network.
     G_opt_kwargs            = {},       # Options for generator optimizer.
     D_opt_kwargs            = {},       # Options for discriminator optimizer.
+    lr_scheduler_type       = None,
     lr_scheduler            = None,
     beta2_scheduler         = None,
     ema_kwargs              = None,
@@ -332,8 +343,11 @@ def training_loop(
             all_real_img += [G_img.detach().clone().split(g_batch_gpu)]
             all_real_c += [G_img_c.detach().clone().to(device).split(g_batch_gpu)]
             all_gen_z += [G_z.detach().clone().split(g_batch_gpu)]
-            
-        cur_lr = cosine_decay_with_warmup(cur_nimg, **lr_scheduler)
+        
+        if lr_scheduler_type == 'R3GAN':
+            cur_lr = cosine_decay_with_warmup(cur_nimg, **lr_scheduler)
+        else lr_scheduler_type == 'EDM2':
+            cur_lr = edm2_learning_rate_schedule(cur_nimg, **lr_scheduler)
         cur_beta2 = cosine_decay_with_warmup(cur_nimg, **beta2_scheduler)
         cur_gamma = cosine_decay_with_warmup(cur_nimg, **gamma_scheduler)
         cur_aug_p = cosine_decay_with_warmup(cur_nimg, **aug_scheduler)
